@@ -11,7 +11,7 @@
 
 #define G_SR 44100.0f
 #define G_NV 8                          /* voices (notes at once) */
-#define G_NG 16                         /* grains at once, shared by the voices */
+#define G_NG 24                         /* grains at once at most, shared by the voices (CLOUD at 16: 63 % CPU) */
 
 enum { LFO_POS, LFO_PITCH, LFO_FILTER, LFO_PAN, NLFO_TARGET };
 
@@ -33,6 +33,7 @@ void g_note_off(int note);
 void g_all_off(void);                   /* every note released (they fade) */
 void g_panic(void);                     /* silence now */
 void g_render(int32_t *lr, uint32_t n, float gain);
+void g_shed(void);                      /* the render ran late: fewer grains for a while (audio interrupt) */
 
 /* for the screen: the grains sounding (where in their sample 0..255, how loud 0..255, their voice), and the voices */
 int g_grains(uint8_t *pos, uint8_t *lvl, uint8_t *voice, int max);

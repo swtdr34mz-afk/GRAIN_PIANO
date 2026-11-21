@@ -254,6 +254,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 }
 
 void app_panic(void) { g_panic(); }
+void app_overload(void) { g_shed(); }   /* the chip at its limit: fewer grains, not a click */
 
 int app_backup_playing(void) { return g_level() > 0.0005f || hd.n > 0; }
 void app_backup_flush(void)

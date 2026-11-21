@@ -222,6 +222,7 @@ static struct {
     float rv_d[4], rv_g[4], rv_lp[4], rv_mph;
     float rv_hpl, rv_hpr;
     float gain_s;
+    uint32_t glimit, gcalm;             /* grains allowed now (g_shed lowers it, a calm second raises it again) */
 } E;
 static const float RV_BASE[4] = {1559.0f, 1907.0f, 2341.0f, 2789.0f};
 
@@ -250,6 +251,13 @@ void g_init(void)
     E.p = d;
     E.rng = 0x2545F491u;
     E.ta = 0.9f;
+    E.glimit = G_NG;
+}
+
+void g_shed(void)
+{
+    if (E.glimit > 10u) E.glimit -= 2u;
+    E.gcalm = 0;
 }
 
 /* ------------------------------------------------------------------ notes --- */
@@ -325,10 +333,13 @@ static void spawn(int vi, float lfo, float size_s, float gnorm)
     const smp_ent_t *e = &smp_e[v->e];
     grain_t *g = 0;
     float len = (float)e->len, loop = (float)e->loop, at, semis, pan, sp2 = p->spray * p->spray;
-    uint32_t ip;
+    uint32_t ip, busy = 0;
     int i;
-    for (i = 0; i < G_NG; i++)
-        if (!E.g[i].on) { g = &E.g[i]; break; }
+    for (i = 0; i < G_NG; i++) {
+        if (E.g[i].on) busy++;
+        else if (!g) g = &E.g[i];
+    }
+    if (busy >= E.glimit) return;       /* (fewer, after g_shed) */
     if (!g) return;                     /* all busy: this one is skipped */
     at = p->pos * (len - 1.0f) + v->scan;
     if (p->ltarget == LFO_POS) at += lfo * p->ldepth * 0.35f * len;
@@ -383,6 +394,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
     int i;
     run_commands();
     E.p = pbuf[pcur];
+    if (E.glimit < G_NG && ++E.gcalm >= 344u) { E.glimit++; E.gcalm = 0; }   /* two calm seconds: one more */
     for (c0 = 0; c0 < n; c0 += CHUNK) {
         const gparams_t *p = &E.p;
         uint32_t cn = n - c0 < CHUNK ? n - c0 : CHUNK;
