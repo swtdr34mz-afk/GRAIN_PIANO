@@ -29,11 +29,11 @@
 /* ------------------------------------------------------------------ the knobs --- */
 enum { K_TONE, K_DYN, K_MIX, K_SIZE, K_DENS, K_POS, K_SPRAY, K_ATK, K_REL, K_PEDAL, K_FREEZE, K_LRATE, K_LDEPTH,
        K_LTARGET, K_WOBBLE, K_RSIZE, K_RMIX, K_DELAY, K_FELT, K_REV, K_HALO, K_HAMT, K_WIDTH, K_TEX, K_TLEV, K_TCHAR,
-       K_TREACT, K_PRESS, K_PAMT, K_MLEV, K_MSCAN, K_PULSE, K_BPM, K_SWING, K_PUMP, NK, K_PRESET = 100, K_SCALE, K_ROOT, K_KEYS, K_LIGHT };   /* (100..: not a preset's own) */
+       K_TREACT, K_PRESS, K_PAMT, K_MLEV, K_MSCAN, K_PULSE, K_BPM, K_SWING, K_PUMP, K_M1, K_M2, NK, K_PRESET = 100, K_SCALE, K_ROOT, K_KEYS, K_LIGHT };   /* (100..: not a preset's own) */
 static const char *const K_NAME[NK] = {"TONE", "DYNAMICS", "MIX", "SIZE", "DENSITY", "POSITION", "SPRAY", "ATTACK",
     "RELEASE", "PEDAL", "FREEZE", "RATE", "DEPTH", "TARGET", "WOBBLE", "ROOM", "REVERB", "DELAY", "FELT", "REVERSE",
     "HALO", "HALO MIX", "WIDTH", "TEXTURE", "LEVEL", "CHAR", "REACT", "PRESSURE", "AMOUNT", "MEMORY", "WANDER", "PULSE",
-    "BPM", "SWING", "PUMP"};
+    "BPM", "SWING", "PUMP", "MACRO 1", "MACRO 2"};
 static const char *const TARGET_NAME[NLFO_TARGET] = {"POSITION", "PITCH", "FILTER", "PAN"};
 static const char *const HALO_NAME[NHALO] = {"OFF", "OCTAVE", "FIFTH", "OCT+5TH", "MAJOR", "MINOR", "SUS", "MAJ9"};
 static const char *const TEX_NAME[NTEX] = {"OFF", "RAIN", "VINYL", "TAPE", "WIND", "SEA", "ROOM"};
@@ -80,19 +80,19 @@ static const char *const PRESET_SHORT[NPRESET] = {"CONCERT", "FELT", "CLOUD", "A
  * REVERSE HALO HALOMIX WIDTH | TEXTURE LEVEL CHARACTER REACT | PRESSURE AMOUNT MEMORY WANDER | PULSE BPM(70 + n) SWING PUMP
  * (0..100, or a name's number) */
 static const uint8_t PRESET_K[NPRESET][NK] = {
-    {72, 70, 10, 50, 25, 15, 10, 0, 35, 45, 0, 30, 0, LFO_POS, 0, 45, 22, 0, 0, 0, HALO_OFF, 0, 50, TEX_OFF, 30, 50, 0, PRESS_OFF, 60, 70, 30, PULSE_OFF, 50, 0, 40},
-    {45, 55, 22, 60, 30, 25, 10, 2, 50, 60, 30, 20, 0, LFO_POS, 15, 35, 30, 10, 75, 0, HALO_OFF, 0, 50, TEX_OFF, 30, 40, 0, PRESS_OFF, 60, 70, 30, PULSE_OFF, 50, 0, 40},
-    {60, 40, 85, 80, 65, 35, 30, 45, 80, 80, 85, 15, 40, LFO_POS, 10, 85, 55, 25, 10, 0, HALO_OFF, 0, 60, TEX_OFF, 30, 50, 0, PRESS_DENSITY, 60, 70, 30, PULSE_OFF, 50, 0, 40},
+    {72, 70, 10, 50, 25, 15, 10, 0, 35, 45, 0, 30, 0, LFO_POS, 0, 45, 22, 0, 0, 0, HALO_OFF, 0, 50, TEX_OFF, 30, 50, 0, PRESS_OFF, 60, 70, 30, PULSE_OFF, 50, 0, 40, 0, 0},
+    {45, 55, 22, 60, 30, 25, 10, 2, 50, 60, 30, 20, 0, LFO_POS, 15, 35, 30, 10, 75, 0, HALO_OFF, 0, 50, TEX_OFF, 30, 40, 0, PRESS_OFF, 60, 70, 30, PULSE_OFF, 50, 0, 40, 0, 0},
+    {60, 40, 85, 80, 65, 35, 30, 45, 80, 80, 85, 15, 40, LFO_POS, 10, 85, 55, 25, 10, 0, HALO_OFF, 0, 60, TEX_OFF, 30, 50, 0, PRESS_DENSITY, 60, 70, 30, PULSE_OFF, 50, 0, 40, 0, 0},
     /* AURORA: the cloud, an octave and a fifth above it, wide, a huge room */
-    {78, 40, 80, 75, 60, 40, 25, 50, 85, 80, 90, 12, 35, LFO_POS, 5, 95, 60, 20, 0, 10, HALO_OCT5, 55, 85, TEX_OFF, 20, 40, 0, PRESS_DENSITY, 60, 75, 25, PULSE_OFF, 50, 0, 40},
+    {78, 40, 80, 75, 60, 40, 25, 50, 85, 80, 90, 12, 35, LFO_POS, 5, 95, 60, 20, 0, 10, HALO_OCT5, 55, 85, TEX_OFF, 20, 40, 0, PRESS_DENSITY, 60, 75, 25, PULSE_OFF, 50, 0, 40, 0, 0},
     /* MIDNIGHT RAIN: a felt piano in the rain, the filter breathing */
-    {42, 50, 55, 70, 45, 30, 20, 20, 70, 75, 70, 10, 30, LFO_FILTER, 10, 70, 45, 15, 60, 15, HALO_OFF, 0, 60, TEX_RAIN, 20, 55, 30, PRESS_SWELL, 50, 65, 30, PULSE_OFF, 45, 0, 40},
+    {42, 50, 55, 70, 45, 30, 20, 20, 70, 75, 70, 10, 30, LFO_FILTER, 10, 70, 45, 15, 60, 15, HALO_OFF, 0, 60, TEX_RAIN, 20, 55, 30, PRESS_SWELL, 50, 65, 30, PULSE_OFF, 45, 0, 40, 0, 0},
     /* DREAMCORE: grains backwards, a major halo, a tape that leans */
-    {58, 40, 75, 65, 55, 45, 35, 35, 75, 70, 60, 20, 25, LFO_PITCH, 35, 75, 50, 30, 20, 60, HALO_MAJ, 35, 70, TEX_TAPE, 14, 40, 20, PRESS_SWELL, 60, 70, 40, PULSE_OFF, 50, 20, 40},
+    {58, 40, 75, 65, 55, 45, 35, 35, 75, 70, 60, 20, 25, LFO_PITCH, 35, 75, 50, 30, 20, 60, HALO_MAJ, 35, 70, TEX_TAPE, 14, 40, 20, PRESS_SWELL, 60, 70, 40, PULSE_OFF, 50, 20, 40, 0, 0},
     /* UNDERWATER: dark, slow waves, the filter rolling with the sea */
-    {35, 40, 70, 85, 55, 40, 25, 40, 80, 80, 80, 8, 70, LFO_FILTER, 15, 80, 55, 10, 40, 20, HALO_OCT, 20, 60, TEX_SEA, 11, 60, 10, PRESS_DENSITY, 60, 70, 20, PULSE_OFF, 40, 0, 40},
+    {35, 40, 70, 85, 55, 40, 25, 40, 80, 80, 80, 8, 70, LFO_FILTER, 15, 80, 55, 10, 40, 20, HALO_OCT, 20, 60, TEX_SEA, 11, 60, 10, PRESS_DENSITY, 60, 70, 20, PULSE_OFF, 40, 0, 40, 0, 0},
     /* STARDUST: lo-fi maj9 dust on vinyl */
-    {62, 50, 65, 45, 60, 50, 40, 15, 70, 70, 65, 25, 30, LFO_PAN, 10, 70, 50, 25, 30, 25, HALO_MAJ9, 45, 75, TEX_VINYL, 20, 45, 25, PRESS_SWELL, 50, 70, 35, PULSE_OFF, 55, 25, 40},
+    {62, 50, 65, 45, 60, 50, 40, 15, 70, 70, 65, 25, 30, LFO_PAN, 10, 70, 50, 25, 30, 25, HALO_MAJ9, 45, 75, TEX_VINYL, 20, 45, 25, PRESS_SWELL, 50, 70, 35, PULSE_OFF, 55, 25, 40, 0, 0},
 };
 
 #define SET_MAGIC 0x33505247u            /* "GRP3": the settings record; another magic loads defaults */
@@ -147,10 +147,79 @@ static void settings_load(void)
 
 static uint8_t *kv(void) { return set.k[set.preset]; }
 
+/* ------------------------------------------------------------------ the macros (SELECT, ALGORITHM) --- */
+/* Two per preset, each moving several knobs at once, with a name: at 0 the preset as it is, turned up it comes to life.
+ * An entry adds d x the macro (0..100) to a knob, or, with thr, sets the knob to d once the macro reaches thr (for
+ * the knobs that pick a name: HALO, TEXTURE, PULSE ...). What is shown on the pages is the knobs as set, before the
+ * macros. */
+typedef struct { uint8_t k; int8_t d; uint8_t thr; } mac_ent_t;
+typedef struct { const char *name; uint8_t n; mac_ent_t e[8]; } macro_t;
+static const macro_t MACRO[NPRESET][2] = {
+    {   /* CONCERT GRAND: the grand opens into a cloud; a halo of octaves and fifths rises over it */
+        {"BLOOM", 7, {{K_MIX, 70, 0}, {K_DENS, 45, 0}, {K_SIZE, 25, 0}, {K_FREEZE, 60, 0}, {K_RMIX, 30, 0},
+                      {K_RSIZE, 35, 0}, {K_ATK, 15, 0}}},
+        {"SHIMMER", 7, {{K_HALO, HALO_OCT5, 5}, {K_HAMT, 65, 0}, {K_MIX, 50, 0}, {K_DENS, 35, 0}, {K_TONE, 15, 0},
+                        {K_RMIX, 25, 0}, {K_WIDTH, 30, 0}}},
+    },
+    {   /* FELT PIANO: drifts into a dream; an old cassette full of dust */
+        {"DREAM", 7, {{K_MIX, 55, 0}, {K_FREEZE, 55, 0}, {K_REL, 40, 0}, {K_ATK, 25, 0}, {K_RMIX, 30, 0},
+                      {K_WOBBLE, 25, 0}, {K_DENS, 30, 0}}},
+        {"DUSTY", 7, {{K_TEX, TEX_VINYL, 5}, {K_TLEV, 35, 0}, {K_FELT, 20, 0}, {K_WOBBLE, 50, 0}, {K_TONE, -20, 0},
+                      {K_LTARGET, LFO_PITCH, 5}, {K_LDEPTH, 30, 0}}},
+    },
+    {   /* CLOUD: a storm of scattered grains, backwards; heaven: the cloud lifts an octave and a fifth */
+        {"STORM", 7, {{K_SPRAY, 60, 0}, {K_DENS, 30, 0}, {K_SIZE, -50, 0}, {K_REV, 40, 0}, {K_LRATE, 50, 0},
+                      {K_LDEPTH, 50, 0}, {K_WIDTH, 15, 0}}},
+        {"HEAVEN", 6, {{K_HALO, HALO_OCT5, 5}, {K_HAMT, 65, 0}, {K_RSIZE, 15, 0}, {K_RMIX, 30, 0}, {K_TONE, 20, 0},
+                       {K_FREEZE, 15, 0}}},
+    },
+    {   /* AURORA: the lights move; then it bursts into glittering sixteenths */
+        {"N. LIGHTS", 6, {{K_LRATE, 30, 0}, {K_LDEPTH, 55, 0}, {K_SPRAY, 40, 0}, {K_HAMT, 35, 0}, {K_WIDTH, 15, 0},
+                          {K_DELAY, 35, 0}}},
+        {"SUPERNOVA", 7, {{K_SIZE, -45, 0}, {K_DENS, 35, 0}, {K_SPRAY, 55, 0}, {K_REV, 35, 0},
+                          {K_PULSE, PULSE_16, 55}, {K_PUMP, 30, 0}, {K_TONE, 15, 0}}},
+    },
+    {   /* MIDNIGHT RAIN: the rain gets heavy; city lights: a minor halo, echoes, then a slow pulse */
+        {"DOWNPOUR", 6, {{K_TLEV, 60, 0}, {K_TCHAR, 45, 0}, {K_LDEPTH, 30, 0}, {K_RMIX, 20, 0}, {K_DENS, 25, 0},
+                         {K_SPRAY, 20, 0}}},
+        {"NEON", 7, {{K_HALO, HALO_MIN, 5}, {K_HAMT, 50, 0}, {K_DELAY, 45, 0}, {K_TONE, 25, 0},
+                     {K_PULSE, PULSE_8, 60}, {K_PUMP, 40, 0}, {K_FELT, -40, 0}}},
+    },
+    {   /* DREAMCORE: everything melts; then it glitches in swung sixteenths */
+        {"MELT", 6, {{K_WOBBLE, 55, 0}, {K_REV, 35, 0}, {K_LDEPTH, 40, 0}, {K_FREEZE, 30, 0}, {K_TONE, -25, 0},
+                     {K_SIZE, 20, 0}}},
+        {"GLITCH", 6, {{K_SIZE, -60, 0}, {K_DENS, 35, 0}, {K_SPRAY, 50, 0}, {K_PULSE, PULSE_16, 30},
+                       {K_PUMP, 50, 0}, {K_SWING, 40, 0}}},
+    },
+    {   /* UNDERWATER: down into the deep sea; up to the surface, the light coming through */
+        {"DEEPER", 6, {{K_TONE, -30, 0}, {K_LDEPTH, 25, 0}, {K_TLEV, 40, 0}, {K_TCHAR, 35, 0}, {K_RSIZE, 15, 0},
+                       {K_WOBBLE, 25, 0}}},
+        {"SURFACE", 6, {{K_TONE, 45, 0}, {K_HALO, HALO_OCT, 5}, {K_HAMT, 50, 0}, {K_SPRAY, 35, 0},
+                        {K_LRATE, 40, 0}, {K_WIDTH, 25, 0}}},
+    },
+    {   /* STARDUST: out into space; then a lo-fi beat */
+        {"COSMOS", 6, {{K_RSIZE, 25, 0}, {K_RMIX, 35, 0}, {K_FREEZE, 30, 0}, {K_HAMT, 40, 0}, {K_WIDTH, 20, 0},
+                       {K_DELAY, 30, 0}}},
+        {"BEAT", 6, {{K_PULSE, PULSE_8, 5}, {K_PUMP, 50, 0}, {K_SWING, 30, 0}, {K_DENS, 30, 0}, {K_TLEV, 30, 0},
+                     {K_TCHAR, 25, 0}}},
+    },
+};
+
 static void send_params(void)
 {
-    const uint8_t *k = kv();
+    uint8_t k[NK];
     gparams_t p;
+    uint32_t i, m;
+    for (i = 0; i < NK; i++) k[i] = kv()[i];
+    for (m = 0; m < 2u; m++) {          /* the macros, on top of the knobs */
+        const macro_t *mc = &MACRO[set.preset % NPRESET][m];
+        int32_t v = kv()[K_M1 + m];
+        for (i = 0; i < mc->n; i++) {
+            const mac_ent_t *x = &mc->e[i];
+            if (x->thr) { if (v >= x->thr) k[x->k] = (uint8_t)x->d; }
+            else k[x->k] = (uint8_t)clamp((int32_t)k[x->k] + x->d * v / 100, 0, 100);
+        }
+    }
 #define F(i) ((float)k[i] * 0.01f)
     p.tone = F(K_TONE); p.dyn = F(K_DYN); p.mix = F(K_MIX);
     p.size = F(K_SIZE); p.dens = F(K_DENS); p.pos = F(K_POS); p.spray = F(K_SPRAY);
@@ -548,6 +617,19 @@ static void knob_turn(int which, int32_t e)
     app_say(knob_name(which), t);
 }
 
+static void macro_turn(int m, int32_t e)
+{
+    char t[8];
+    uint8_t *k = kv();
+    int32_t v = clamp((int32_t)k[K_M1 + m] + e * (e > 1 || e < -1 ? 6 : 3), 0, 100);
+    if (v == k[K_M1 + m]) return;
+    k[K_M1 + m] = (uint8_t)v;
+    set_dirty = 1;
+    send_params();
+    int_text(v, t);
+    app_say(MACRO[set.preset % NPRESET][m].name, t);
+}
+
 static void page_go(int pg)
 {
     ui.page = (uint8_t)pg;
@@ -658,8 +740,8 @@ static void input(void)
             ui.turned_at[k] = now ? now : 1u;
         }
     if ((e = plat_enc(EN_PRESET)) != 0) preset_step(e > 0 ? 1 : -1);
-    if ((e = plat_enc(EN_SELECT)) != 0) knob_turn(K_POS, e);
-    if ((e = plat_enc(EN_ALGO)) != 0) knob_turn(K_SPRAY, e);
+    if ((e = plat_enc(EN_SELECT)) != 0) macro_turn(0, e);   /* the preset's two macros */
+    if ((e = plat_enc(EN_ALGO)) != 0) macro_turn(1, e);
     /* the lights: the page's button, PLAY while HOLD is on, SAVE when something changed; the keys down bright, the
      * held notes' keys dim */
     {
@@ -746,6 +828,16 @@ static void draw_cloud(int32_t y0, int32_t h)
             for (yy = y0 + 4; yy < y0 + h - 8; yy += 3) cv_rect(x, yy, 1, 1, COL_DUSK);
             cv_rect(x - 3, ny, 7, 1, COL_EMBER);
         }
+    if (ui.page == PG_MAIN) {             /* the two macros: SELECT and ALGORITHM, their names and how far */
+        int m;
+        for (m = 0; m < 2; m++) {
+            int32_t y = y0 + 2 + m * 14, bw = 60 * kv()[K_M1 + m] / 100;
+            cv_text(10, y, &FONT_T, m ? "ALGO" : "SELECT", COL_LABEL);
+            cv_text(48, y, &FONT_T, MACRO[set.preset % NPRESET][m].name, kv()[K_M1 + m] ? COL_GOLD : COL_LABEL);
+            cv_rect(118, y + 5, 60, 2, COL_LINE);
+            cv_rect(118, y + 5, bw, 2, COL_EMBER);
+        }
+    }
     for (i = 0; i < n; i++) {
         int32_t x = x0 + (w - 1) * gp[i] / 255;
         uint8_t nn = 60, pp;
@@ -901,7 +993,13 @@ int app_expect(const char *what, int *got)
     else if (!strncmp(what, "k_", 2)) {  /* k_NAME: a knob's value in the preset */
         int i;
         for (i = 0; i < NK; i++)
-            if (!strcmp(what + 2, K_NAME[i])) { *got = kv()[i]; return 1; }
+            {
+                char nm[16];
+                uint32_t q;
+                for (q = 0; K_NAME[i][q] && q < 15u; q++) nm[q] = K_NAME[i][q] == ' ' ? '_' : K_NAME[i][q];
+                nm[q] = 0;
+                if (!strcmp(what + 2, nm)) { *got = kv()[i]; return 1; }   /* (a space as _: k_MACRO_1) */
+            }
         return 0;
     } else
         return 0;

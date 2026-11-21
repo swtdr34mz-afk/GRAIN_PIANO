@@ -1,0 +1,41 @@
+# SELECT and ALGORITHM: the preset's two macros. CONCERT GRAND: as it is, then BLOOM, then SHIMMER
+wait 600
+expect preset 0
+tap PLAY
+wait 30
+key w4 down 90
+key w6 down 80
+key w8 down 80
+wait 100
+key w4 up
+key w6 up
+key w8 up
+wait 200
+wav m_plain.wav
+wait 3000
+wavstop
+spin SELECT 34
+wait 50
+expect k_MACRO_1 100
+key w4 down 90
+key w6 down 80
+key w8 down 80
+wait 100
+key w4 up
+key w6 up
+key w8 up
+wait 200
+wav m_bloom.wav
+wait 3000
+wavstop
+shot macros.png
+spin ALGO 34
+wait 50
+expect k_MACRO_2 100
+wav m_shimmer.wav
+wait 3000
+wavstop
+spin SELECT -34
+spin ALGO -34
+wait 50
+expect k_MACRO_1 0

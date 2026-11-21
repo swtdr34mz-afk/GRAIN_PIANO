@@ -12,10 +12,11 @@ floating clouds, glittering pads, and notes between the piano's keys.
 ## 1. Quick start
 
 1. Play a few notes. You hear the piano and, over it, its cloud of grains.
-2. Turn **PRESET**: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST.
-3. Press **PLAY** (HOLD on) and play a chord: it keeps sounding, both hands free for the knobs.
-4. Turn **K1–K4**. The lit button shows the page you are on.
-5. Press **SAVE** to keep your settings (it is lit when something changed).
+2. Turn **SELECT** and **ALGORITHM**: the preset's two macros, that bring it to life.
+3. Turn **PRESET**: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST.
+4. Press **PLAY** (HOLD on) and play a chord: it keeps sounding, both hands free for the knobs.
+5. Turn **K1–K4**. The lit button shows the page you are on.
+6. Press **SAVE** to keep your settings (it is lit when something changed).
 
 ## 2. How it sounds
 
@@ -34,8 +35,8 @@ becomes a cloud that never ends.
 | Keys | the piano, with velocity. F3–C5 also sense pressure (PRESSURE) |
 | OCT− / OCT+ | octave, −2 … +2 |
 | PRESET knob | the preset; each one keeps your changes |
-| SELECT knob | POSITION, on every page |
-| ALGORITHM knob | SPRAY, on every page |
+| SELECT knob | the preset's macro 1 (chapter 5) |
+| ALGORITHM knob | the preset's macro 2 (chapter 5) |
 | K1–K4 | the page's four knobs |
 | HOME | the main page (the cloud). **Held 1 s:** the preset back as it came |
 | PLAY | **HOLD** on / off (lit green). **Held 0.8 s:** every held note lets go |
@@ -52,7 +53,7 @@ and SAVE when there is something to save.
 
 **HOME – the main page:** POSITION · DENSITY · SIZE · MIX.
 The cloud on the screen runs from the hammer (left) to the tail (right). Each dot is a grain, brighter as it sounds
-louder. The dotted lines show where each note is read. The gold square marks POSITION.
+louder. The dotted lines show where each note is read. The gold square marks POSITION; top left, the two macros (SELECT, ALGORITHM).
 
 ### SEL – PIANO
 | Knob | What it does |
@@ -121,7 +122,7 @@ louder. The dotted lines show where each note is read. The gold square marks POS
 ### SEQ – SCALE (for every preset)
 | Knob | What it does |
 | --- | --- |
-| SCALE | the scale (chapter 6) |
+| SCALE | the scale (chapter 7) |
 | ROOT | C … B |
 | KEYS | SNAP: each key to the scale's step at or below it · WHITE: the white keys in a row, the black ones silent · ALL: every key the next step |
 | LIGHT | the roots' keys lit |
@@ -134,7 +135,25 @@ louder. The dotted lines show where each note is read. The gold square marks POS
 | SWING | every second burst later |
 | PUMP | the sound ducks on each beat (sidechain) |
 
-## 5. HOLD, the smart part
+## 5. The macros: SELECT and ALGORITHM
+
+**SELECT** and **ALGORITHM** are each preset's two **macros**: each moves 6 or 7 knobs at once. At 0 the preset is as
+saved; turned up, it comes to life. Their names, and how far they are turned, are on the main page.
+
+| Preset | SELECT | ALGORITHM |
+| --- | --- | --- |
+| CONCERT GRAND | **BLOOM**: the grand opens into a cloud | **SHIMMER**: a halo of octaves and fifths rises |
+| FELT PIANO | **DREAM**: drifts into a dream | **DUSTY**: an old cassette full of dust (vinyl, wobble) |
+| CLOUD | **STORM**: a storm of scattered grains, some backwards | **HEAVEN**: the cloud lifts an octave and a fifth |
+| AURORA | **N. LIGHTS**: the lights move, echoes | **SUPERNOVA**: bursts into glittering sixteenths |
+| MIDNIGHT RAIN | **DOWNPOUR**: the rain gets heavy | **NEON**: a minor halo, echoes, then a slow pulse |
+| DREAMCORE | **MELT**: everything melts | **GLITCH**: glitches in swung sixteenths |
+| UNDERWATER | **DEEPER**: down into the deep sea | **SURFACE**: up to the surface, the light coming through |
+| STARDUST | **COSMOS**: out into space | **BEAT**: a lo-fi beat |
+
+The macros are kept per preset (SAVE). The pages show the knobs as you set them, before the macros.
+
+## 6. HOLD, the smart part
 
 **PLAY** turns HOLD on (lit). Then what you play stays:
 
@@ -148,7 +167,7 @@ louder. The dotted lines show where each note is read. The gold square marks POS
 
 Tip: HOLD + FREEZE at the top + a chord = an endless cloud to shape with every page.
 
-## 6. The scales
+## 7. The scales
 
 The samples are retuned freely, so some scales sit **between** the piano's keys.
 
@@ -170,14 +189,14 @@ The samples are retuned freely, so some scales sit **between** the piano's keys.
 
 MIDI out sends the nearest key for notes between the keys.
 
-## 7. MEMORY
+## 8. MEMORY
 
 1. Play a short phrase.
 2. Press **REC**: the last 2 seconds are frozen into a cloud of their own (REC lit, "MEM" at the top).
 3. Play over it. Its level and movement are on MAGIC 2 (MEMORY, WANDER); SIZE, DENSITY, SPRAY, HALO and WIDTH shape it too.
 4. Press **REC** again: it fades out.
 
-## 8. Presets
+## 9. Presets
 
 | Preset | Character |
 | --- | --- |
@@ -192,19 +211,19 @@ MIDI out sends the nearest key for notes between the keys.
 
 Each preset keeps your changes; SAVE keeps them for good; **HOME held 1 s** brings the preset back as it came.
 
-## 9. MIDI
+## 10. MIDI
 
 - **USB-MIDI in:** notes play the piano, on any channel.
 - **USB-MIDI out:** what you play goes out as notes.
 - **MIDI clock in:** PULSE follows it (BPM shows EXT).
 
-## 10. Good to know
+## 11. Good to know
 
 - **CPU:** under 85 % all is well. At the limit GRAIN PIANO drops a few grains for a moment rather than clicking.
 - **Pressure** only on F3–C5: the top seven keys have no sensor.
 - **Saving:** only SAVE keeps your changes over a power-off.
 
-## 11. Credits
+## 12. Credits
 
 GRAIN PIANO by **swtdr34mz**, GPL-3.0. Piano: **Salamander Grand Piano V3** by Alexander Holm (CC-BY 3.0). Built on
 **fm1-base** (Charles Vestal) and **felucca-bsp** (Leo Kuroshita, Hügelton Instruments). Inspired by **Tonitor**

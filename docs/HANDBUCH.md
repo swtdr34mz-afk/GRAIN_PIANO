@@ -13,11 +13,12 @@ Klaviertasten.
 ## 1. Schnellstart
 
 1. Spiel ein paar Töne. Du hörst den Flügel und darüber seine Grain-Wolke.
-2. Dreh am **PRESET**-Regler: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER,
+2. Dreh an **SELECT** und **ALGORITHM**: die zwei Makros des Presets, die es richtig aufleben lassen.
+3. Dreh am **PRESET**-Regler: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER,
    STARDUST.
-3. Drück **PLAY** (HOLD an). Spiel einen Akkord: Er klingt weiter, und du hast beide Hände für die Regler frei.
-4. Dreh an **K1–K4**. Welche Seite gerade aktiv ist, zeigt der leuchtende Knopf.
-5. Drück **SAVE**, um deine Einstellungen zu behalten. SAVE leuchtet, wenn sich etwas geändert hat.
+4. Drück **PLAY** (HOLD an). Spiel einen Akkord: Er klingt weiter, und du hast beide Hände für die Regler frei.
+5. Dreh an **K1–K4**. Welche Seite gerade aktiv ist, zeigt der leuchtende Knopf.
+6. Drück **SAVE**, um deine Einstellungen zu behalten. SAVE leuchtet, wenn sich etwas geändert hat.
 
 ## 2. Wie GRAIN PIANO klingt
 
@@ -37,8 +38,8 @@ ein gehaltener Ton zu einer Wolke, die nie aufhört.
 | Tasten | Klavier, mit Anschlagsdynamik. Die Tasten F3–C5 messen auch den Druck (siehe PRESSURE). |
 | OCT− / OCT+ | Oktave, −2 bis +2 |
 | PRESET-Regler | Preset wählen. Jedes Preset merkt sich deine Änderungen. |
-| SELECT-Regler | POSITION, auf jeder Seite |
-| ALGORITHM-Regler | SPRAY, auf jeder Seite |
+| SELECT-Regler | Makro 1 des Presets (Kapitel 5) |
+| ALGORITHM-Regler | Makro 2 des Presets (Kapitel 5) |
 | K1–K4 | die vier Regler der aktiven Seite |
 | HOME | Hauptseite mit der Wolke. **1 s halten:** Das Preset wird auf Werkseinstellung zurückgesetzt. |
 | PLAY | **HOLD** an/aus (leuchtet grün). **0,8 s halten:** alle gehaltenen Töne aus. |
@@ -56,7 +57,7 @@ die Zahl orange), die Oktave und SAVE, wenn es etwas zu speichern gibt.
 **HOME – Hauptseite:** POSITION · DENSITY · SIZE · MIX.
 Die Wolke im Display: Links ist der Hammeranschlag, rechts der Ausklang. Jeder Punkt ist ein Grain, je heller,
 desto lauter. Die gepunkteten Linien zeigen, wo jede gespielte Note gerade gelesen wird. Das goldene Quadrat
-unten zeigt POSITION.
+unten zeigt POSITION. Oben links stehen die zwei Makros (SELECT, ALGORITHM).
 
 ### SEL – PIANO
 | Regler | Funktion |
@@ -125,7 +126,7 @@ unten zeigt POSITION.
 ### SEQ – SCALE (gilt für alle Presets)
 | Regler | Funktion |
 | --- | --- |
-| SCALE | die Skala (siehe Kapitel 6) |
+| SCALE | die Skala (siehe Kapitel 7) |
 | ROOT | Grundton C … B |
 | KEYS | SNAP: jede Taste rutscht auf den nächsten Skalenton darunter · WHITE: nur die weißen Tasten spielen die Skala, die schwarzen sind still · ALL: jede Taste ist der nächste Skalenton |
 | LIGHT | Die Grundton-Tasten leuchten heller. |
@@ -138,7 +139,27 @@ unten zeigt POSITION.
 | SWING | verschiebt jeden zweiten Schub |
 | PUMP | Der Klang duckt sich auf jeden Schlag (Sidechain-Effekt). |
 
-## 5. HOLD – die smarte Haltefunktion
+## 5. Die Makros: SELECT und ALGORITHM
+
+**SELECT** und **ALGORITHM** sind pro Preset zwei **Makro-Regler**. Jeder dreht 6 bis 7 Parameter gleichzeitig.
+Auf 0 klingt das Preset wie gespeichert, aufgedreht lebt es richtig auf. Die Namen und wie weit sie aufgedreht
+sind, siehst du auf der Hauptseite.
+
+| Preset | SELECT | ALGORITHM |
+| --- | --- | --- |
+| CONCERT GRAND | **BLOOM**: Der Flügel öffnet sich zur Wolke. | **SHIMMER**: Ein Halo aus Oktaven und Quinten steigt auf. |
+| FELT PIANO | **DREAM**: driftet in einen Traum | **DUSTY**: eine alte Kassette voller Staub (Vinyl, Leiern) |
+| CLOUD | **STORM**: ein Sturm aus verstreuten Grains, teils rückwärts | **HEAVEN**: Die Wolke hebt sich um Oktave und Quinte. |
+| AURORA | **N. LIGHTS**: Die Lichter bewegen sich, Echos. | **SUPERNOVA**: zerspringt in glitzernde Sechzehntel |
+| MIDNIGHT RAIN | **DOWNPOUR**: Der Regen wird stark. | **NEON**: Moll-Halo, Echos, dann ein langsamer Puls |
+| DREAMCORE | **MELT**: Alles zerfließt. | **GLITCH**: Glitches in geswingten Sechzehnteln |
+| UNDERWATER | **DEEPER**: hinab in die Tiefsee | **SURFACE**: hinauf zur Oberfläche, Licht bricht durch |
+| STARDUST | **COSMOS**: hinaus ins All | **BEAT**: ein Lo-Fi-Beat |
+
+Die Makros werden pro Preset gespeichert (SAVE). Die Seiten zeigen die Regler, wie du sie eingestellt hast, also
+ohne den Anteil der Makros.
+
+## 6. HOLD – die smarte Haltefunktion
 
 **PLAY** schaltet HOLD ein (PLAY leuchtet). Dann klingt, was du spielst, weiter:
 
@@ -152,7 +173,7 @@ unten zeigt POSITION.
 
 Tipp: HOLD + FREEZE ganz auf + ein Akkord ergibt eine endlose Wolke, die du mit allen Seiten formen kannst.
 
-## 6. Die Skalen
+## 7. Die Skalen
 
 Weil GRAIN PIANO die Klavier-Samples stufenlos umstimmt, gibt es auch Skalen **zwischen** den Klaviertasten.
 
@@ -174,7 +195,7 @@ Weil GRAIN PIANO die Klavier-Samples stufenlos umstimmt, gibt es auch Skalen **z
 
 Über MIDI geht bei Zwischentönen der nächstliegende normale Ton raus.
 
-## 7. MEMORY
+## 8. MEMORY
 
 1. Spiel eine kurze Phrase.
 2. Drück **REC**. Die letzten 2 Sekunden werden zu einer eigenen Wolke eingefroren. REC leuchtet, oben steht
@@ -183,7 +204,7 @@ Weil GRAIN PIANO die Klavier-Samples stufenlos umstimmt, gibt es auch Skalen **z
    SIZE, DENSITY, SPRAY, HALO und WIDTH wirken auch auf sie.
 4. Drück **REC** nochmal: Die Wolke blendet langsam aus.
 
-## 8. Die Presets
+## 9. Die Presets
 
 | Preset | Charakter |
 | --- | --- |
@@ -199,20 +220,20 @@ Weil GRAIN PIANO die Klavier-Samples stufenlos umstimmt, gibt es auch Skalen **z
 Jedes Preset merkt sich deine Änderungen, SAVE speichert sie dauerhaft. **HOME 1 s halten** setzt das aktuelle
 Preset auf Werkseinstellung zurück.
 
-## 9. MIDI
+## 10. MIDI
 
 - **USB-MIDI in:** Noten spielen das Klavier, auf jedem Kanal.
 - **USB-MIDI out:** Was du spielst, geht als Noten raus.
 - **MIDI-Clock in:** PULSE folgt dem Tempo, BPM zeigt dann „EXT“.
 
-## 10. Gut zu wissen
+## 11. Gut zu wissen
 
 - **CPU-Anzeige:** Unter 85 % ist alles gut. Wird es knapp, lässt GRAIN PIANO für einen Moment ein paar Grains weg,
   statt zu knacksen.
 - **Tastendruck** gibt es nur auf den Tasten F3–C5. Die sieben obersten Tasten haben keinen Drucksensor.
 - **Speichern:** Erst SAVE speichert dauerhaft. Was nicht gespeichert ist, ist nach dem Ausschalten weg.
 
-## 11. Credits
+## 12. Credits
 
 GRAIN PIANO von **swtdr34mz**, GPL-3.0. Flügel: **Salamander Grand Piano V3** von Alexander Holm (CC-BY 3.0).
 Gebaut auf **fm1-base** (Charles Vestal) und **felucca-bsp** (Leo Kuroshita, Hügelton Instruments). Inspiriert von

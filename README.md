@@ -37,7 +37,7 @@ note's pitch, taken from a point that moves through the sound (from the hammer t
 | SEQ | SCALE (for every preset): SCALE, ROOT, KEYS (SNAP: each key to the scale's step at or below it; WHITE: the white keys in a row, the black ones silent; ALL: every key the next step), LIGHT (the roots' keys lit) |
 | K1..K4 | The page's four knobs |
 | PRESET | The preset: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST. Each keeps your changes |
-| SELECT / ALGORITHM | POSITION and SPRAY, on every page |
+| SELECT / ALGORITHM | the preset's two macros: each moves several knobs at once (CONCERT GRAND: BLOOM and SHIMMER, CLOUD: STORM and HEAVEN ...) |
 | SAVE | Keep the settings (lit: something changed) |
 
 ### The scales
