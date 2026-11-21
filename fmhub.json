@@ -1,8 +1,9 @@
 {
-  "what": "A granular grand piano: the Salamander grand broken into grains. Eight presets with two macros each (SELECT, ALGORITHM), a smart HOLD, backwards grains, harmonic halos, textures (rain, vinyl, tape, wind, sea), MEMORY (your last phrase frozen into a cloud), PULSE in time with a MIDI clock, key pressure, and 15 scales, some between the keys (quarter tones, overtones, gamelan, Bohlen-Pierce).",
+  "what": "A granular grand piano: the Salamander grand broken into grains. 8 presets with two macros each, smart HOLD, backwards grains, halos, textures (rain, vinyl, sea), MEMORY, PULSE, key pressure and 15 scales, some between the keys.",
   "author": "swtdr34mz",
-  "kinds": "sampler",
+  "kinds": "synth",
   "play": "https://swtdr34mz-afk.github.io/GRAIN_PIANO/emu/",
   "image": "site/img/screen-main.png",
-  "sounds": "licensed: Salamander Grand Piano V3 by Alexander Holm, CC-BY 3.0"
+  "sounds": "licensed: Salamander Grand Piano V3 by Alexander Holm, CC-BY 3.0",
+  "color": "#ECBA62"
 }
