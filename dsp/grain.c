@@ -41,6 +41,8 @@ static int16_t dl_buf[2][DL_N] PLAT_POOL;
 #define RB_N 4096u                      /* a backwards grain's buffer: 186 ms of the sample */
 static int16_t rbuf[G_NREV][RB_N] PLAT_POOL;
 static int8_t mem_buf[MEM_N] PLAT_POOL;
+#define MEM_BLK 256u                    /* MEMORY's loudness, a block of 256 samples each: where its grains may start */
+static uint8_t mem_loud[MEM_N / MEM_BLK + 1u];
 
 /* ------------------------------------------------------------------ the samples --- */
 typedef struct { uint8_t root, sidx, lidx, pad; int16_t spred, lpred; uint32_t off, len, loop; } smp_ent_t;
@@ -373,6 +375,18 @@ static void run_commands(void)
         case CMD_TEMPO: E.ext_bpm = c.pitch; break;
         case CMD_MEM:
             if (c.note && E.mem_fill > 4410u) {   /* (at least 0.2 s played) */
+                uint32_t b, k, base = (E.mem_w + MEM_N - E.mem_fill) % MEM_N, top = 1u;
+                for (b = 0; b * MEM_BLK < E.mem_fill; b++) {   /* each block's loudness, the loudest = 255 */
+                    uint32_t a = 0;
+                    for (k = 0; k < MEM_BLK; k++) {
+                        int32_t x = mem_buf[(base + b * MEM_BLK + k) % MEM_N];
+                        a += (uint32_t)(x < 0 ? -x : x);
+                    }
+                    a /= MEM_BLK;
+                    mem_loud[b] = (uint8_t)(a > 255u ? 255u : a);
+                    if (mem_loud[b] > top) top = mem_loud[b];
+                }
+                for (k = 0; k < b; k++) mem_loud[k] = (uint8_t)(mem_loud[k] * 255u / top);
                 E.mem_frozen = 1; E.mem_on = 1; E.mem_gt = 1.0f;
                 E.mem_pos = 0.0f; E.mem_next = 0.0f;
             } else E.mem_gt = 0.0f;
@@ -614,8 +628,9 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             pumpg = 1.0f - p->pump * 0.85f * E.pump;
         } else E.pump = 0.0f;
         if (E.mem_on) {                 /* MEMORY: its fade, its wandering, its grains' births */
-            float sp = fm_clampf(p->size * 0.6f + 0.15f, 0.1f, 1.0f), msz = exp_range(sp, 0.02f, 0.5f);
-            float mint = SR / (6.0f + 30.0f * p->dens), span = (float)(E.mem_fill > 2u ? E.mem_fill - 2u : 1u);
+            /* its own grains, whatever the preset's: long (0.15 .. 0.45 s with SIZE), always about three at once, so
+             * the cloud is smooth, never a stutter of short pieces */
+            float msz = 0.15f + 0.3f * p->size, mint = msz * SR / 3.2f, span = (float)(E.mem_fill > 2u ? E.mem_fill - 2u : 1u);
             E.mem_g += (E.mem_gt - E.mem_g) * (E.mem_gt > E.mem_g ? 0.01f : 0.004f);
             if (E.mem_gt <= 0.0f && E.mem_g < 0.001f) { E.mem_on = 0; E.mem_frozen = 0; E.mem_fill = 0; }
             E.mem_pos += (float)cn * 0.5f * p->mscan * p->mscan;
@@ -624,11 +639,23 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             while (E.mem_next <= 0.0f && E.mem_on) {
                 int f = -1;
                 for (j = 0; j < G_NM; j++) if (!E.mg[j].on) { f = j; break; }
-                E.mem_next += mint * (1.0f + 0.5f * rnd());
+                E.mem_next += mint * (1.0f + 0.3f * rnd());
                 if (f >= 0) {
-                    float at = E.mem_pos + rnd() * (0.02f + 0.4f * p->spray * p->spray) * span, semis = 0.0f, pan;
-                    while (at < 0.0f) at += span;
-                    while (at >= span) at -= span;
+                    float at = 0.0f, semis = 0.0f, pan;
+                    int tries;
+                    for (tries = 0; tries < 6; tries++) {   /* somewhere near the wandering point, where it sounds */
+                        at = E.mem_pos + rnd() * (0.12f + 0.4f * p->spray * p->spray) * span;
+                        while (at < 0.0f) at += span;
+                        while (at >= span) at -= span;
+                        if (mem_loud[(uint32_t)at / MEM_BLK] > 60u) break;
+                    }
+                    if (tries == 6) {           /* a quiet stretch: on to the next place that sounds */
+                        uint32_t nb = (uint32_t)span / MEM_BLK, b0 = (uint32_t)at / MEM_BLK, q;
+                        for (q = 1; q <= nb; q++) {
+                            uint32_t bq = (b0 + q) % (nb ? nb : 1u);
+                            if (mem_loud[bq] > 60u) { at = (float)(bq * MEM_BLK) + rndu() * (float)MEM_BLK; break; }
+                        }
+                    }
                     if (p->halo != HALO_OFF && p->halo < NHALO && rndu() < p->hamt) semis = rndu() < 0.5f ? 12.0f : 7.0f;
                     E.mg[f].pos = (float)((E.mem_w + MEM_N - E.mem_fill) % MEM_N) + at;
                     if (E.mg[f].pos >= (float)MEM_N) E.mg[f].pos -= (float)MEM_N;
@@ -642,7 +669,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 }
             }
             {                           /* each grain's level this chunk: MEMORY's level, its fade */
-                float g = p->mlev * p->mlev * 2.2f * E.mem_g;
+                float g = p->mlev * p->mlev * 1.6f * E.mem_g;
                 for (j = 0; j < G_NM; j++) { E.mg[j].gl = E.mg[j].pl * g; E.mg[j].gr = E.mg[j].pr * g; }
             }
         }
