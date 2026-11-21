@@ -28,13 +28,27 @@
 
 /* ------------------------------------------------------------------ the knobs --- */
 enum { K_TONE, K_DYN, K_MIX, K_SIZE, K_DENS, K_POS, K_SPRAY, K_ATK, K_REL, K_PEDAL, K_FREEZE, K_LRATE, K_LDEPTH,
-       K_LTARGET, K_WOBBLE, K_RSIZE, K_RMIX, K_DELAY, K_FELT, NK, K_PRESET = 100 };
+       K_LTARGET, K_WOBBLE, K_RSIZE, K_RMIX, K_DELAY, K_FELT, K_REV, K_HALO, K_HAMT, K_WIDTH, K_TEX, K_TLEV, K_TCHAR,
+       K_TREACT, NK, K_PRESET = 100 };
 static const char *const K_NAME[NK] = {"TONE", "DYNAMICS", "MIX", "SIZE", "DENSITY", "POSITION", "SPRAY", "ATTACK",
-    "RELEASE", "PEDAL", "FREEZE", "RATE", "DEPTH", "TARGET", "WOBBLE", "ROOM", "REVERB", "DELAY", "FELT"};
+    "RELEASE", "PEDAL", "FREEZE", "RATE", "DEPTH", "TARGET", "WOBBLE", "ROOM", "REVERB", "DELAY", "FELT", "REVERSE",
+    "HALO", "HALO MIX", "WIDTH", "TEXTURE", "LEVEL", "CHAR", "REACT"};
 static const char *const TARGET_NAME[NLFO_TARGET] = {"POSITION", "PITCH", "FILTER", "PAN"};
+static const char *const HALO_NAME[NHALO] = {"OFF", "OCTAVE", "FIFTH", "OCT+5TH", "MAJOR", "MINOR", "SUS", "MAJ9"};
+static const char *const TEX_NAME[NTEX] = {"OFF", "RAIN", "VINYL", "TAPE", "WIND", "SEA", "ROOM"};
+/* a knob that picks from names: their list and count (0: a value 0..100) */
+static const char *const *knob_names(int k, uint32_t *n)
+{
+    if (k == K_LTARGET) { *n = NLFO_TARGET; return TARGET_NAME; }
+    if (k == K_HALO) { *n = NHALO; return HALO_NAME; }
+    if (k == K_TEX) { *n = NTEX; return TEX_NAME; }
+    *n = 0;
+    return 0;
+}
 
-enum { PG_MAIN, PG_SEL, PG_EDIT, PG_ENV, PG_LFO, PG_FX, NPAGE };
-static const char *const PAGE_NAME[NPAGE] = {"MAIN", "PIANO", "GRAINS", "ENVELOPE", "MOVEMENT", "ROOM"};
+enum { PG_MAIN, PG_SEL, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_MAGIC, PG_TEX, NPAGE };
+static const char *const PAGE_NAME[NPAGE] = {"MAIN", "PIANO", "GRAINS", "ENVELOPE", "MOVEMENT", "ROOM", "MAGIC",
+                                             "TEXTURE"};
 static const uint8_t PAGE_K[NPAGE][4] = {
     {K_POS, K_DENS, K_SIZE, K_MIX},
     {K_PRESET, K_TONE, K_DYN, K_MIX},
@@ -42,27 +56,46 @@ static const uint8_t PAGE_K[NPAGE][4] = {
     {K_ATK, K_REL, K_PEDAL, K_FREEZE},
     {K_LRATE, K_LDEPTH, K_LTARGET, K_WOBBLE},
     {K_RSIZE, K_RMIX, K_DELAY, K_FELT},
+    {K_REV, K_HALO, K_HAMT, K_WIDTH},
+    {K_TEX, K_TLEV, K_TCHAR, K_TREACT},
 };
 
 /* ------------------------------------------------------------------ the presets --- */
-#define NPRESET 3
-static const char *const PRESET_NAME[NPRESET] = {"CONCERT GRAND", "FELT PIANO", "CLOUD"};
-static const char *const PRESET_SHORT[NPRESET] = {"CONCERT", "FELT", "CLOUD"};   /* (in a knob's cell) */
-/* TONE DYN MIX | SIZE DENS POS SPRAY | ATK REL PEDAL FREEZE | RATE DEPTH TARGET WOBBLE | ROOM REVERB DELAY FELT (0..100) */
+#define NPRESET 8
+#define NPRESET_MAX 12                   /* room kept in the settings for presets to come */
+#define NK_MAX 40                        /* and for knobs to come: a new one never resets the settings */
+static const char *const PRESET_NAME[NPRESET] = {"CONCERT GRAND", "FELT PIANO", "CLOUD", "AURORA", "MIDNIGHT RAIN",
+                                                 "DREAMCORE", "UNDERWATER", "STARDUST"};
+static const char *const PRESET_SHORT[NPRESET] = {"CONCERT", "FELT", "CLOUD", "AURORA", "RAIN", "DREAM", "UNDERW.",
+                                                  "STARDUST"};   /* (in a knob's cell) */
+/* TONE DYN MIX | SIZE DENS POS SPRAY | ATK REL PEDAL FREEZE | RATE DEPTH TARGET WOBBLE | ROOM REVERB DELAY FELT |
+ * REVERSE HALO HALOMIX WIDTH | TEXTURE LEVEL CHARACTER REACT (0..100, or a name's number) */
 static const uint8_t PRESET_K[NPRESET][NK] = {
-    {72, 70, 10, 50, 25, 15, 10, 0, 35, 45, 0, 30, 0, LFO_POS, 0, 45, 22, 0, 0},
-    {45, 55, 22, 60, 30, 25, 10, 2, 50, 60, 30, 20, 0, LFO_POS, 15, 35, 30, 10, 75},
-    {60, 40, 85, 80, 65, 35, 30, 45, 80, 80, 85, 15, 40, LFO_POS, 10, 85, 55, 25, 10},
+    {72, 70, 10, 50, 25, 15, 10, 0, 35, 45, 0, 30, 0, LFO_POS, 0, 45, 22, 0, 0, 0, HALO_OFF, 0, 50, TEX_OFF, 30, 50, 0},
+    {45, 55, 22, 60, 30, 25, 10, 2, 50, 60, 30, 20, 0, LFO_POS, 15, 35, 30, 10, 75, 0, HALO_OFF, 0, 50, TEX_OFF, 30, 40, 0},
+    {60, 40, 85, 80, 65, 35, 30, 45, 80, 80, 85, 15, 40, LFO_POS, 10, 85, 55, 25, 10, 0, HALO_OFF, 0, 60, TEX_OFF, 30, 50, 0},
+    /* AURORA: the cloud, an octave and a fifth above it, wide, a huge room */
+    {78, 40, 80, 75, 60, 40, 25, 50, 85, 80, 90, 12, 35, LFO_POS, 5, 95, 60, 20, 0, 10, HALO_OCT5, 55, 85, TEX_OFF, 20, 40, 0},
+    /* MIDNIGHT RAIN: a felt piano in the rain, the filter breathing */
+    {42, 50, 55, 70, 45, 30, 20, 20, 70, 75, 70, 10, 30, LFO_FILTER, 10, 70, 45, 15, 60, 15, HALO_OFF, 0, 60, TEX_RAIN, 50, 55, 30},
+    /* DREAMCORE: grains backwards, a major halo, a tape that leans */
+    {58, 40, 75, 65, 55, 45, 35, 35, 75, 70, 60, 20, 25, LFO_PITCH, 35, 75, 50, 30, 20, 60, HALO_MAJ, 35, 70, TEX_TAPE, 30, 40, 20},
+    /* UNDERWATER: dark, slow waves, the filter rolling with the sea */
+    {35, 40, 70, 85, 55, 40, 25, 40, 80, 80, 80, 8, 70, LFO_FILTER, 15, 80, 55, 10, 40, 20, HALO_OCT, 20, 60, TEX_SEA, 45, 60, 10},
+    /* STARDUST: lo-fi maj9 dust on vinyl */
+    {62, 50, 65, 45, 60, 50, 40, 15, 70, 70, 65, 25, 30, LFO_PAN, 10, 70, 50, 25, 30, 25, HALO_MAJ9, 45, 75, TEX_VINYL, 40, 45, 25},
 };
 
-#define SET_MAGIC 0x32505247u            /* "GRP2": the settings record; another magic loads defaults */
+#define SET_MAGIC 0x33505247u            /* "GRP3": the settings record; another magic loads defaults */
 typedef struct {
     uint32_t magic;
     uint8_t preset, hold;
     int8_t octave;                       /* -2 .. +2 */
     uint8_t rsv;
-    uint8_t k[NPRESET][NK];              /* each preset's knobs, as changed */
-    uint8_t rsv2[3];
+    uint8_t nk, np;                      /* the knobs and presets these settings know: newer ones come as they came */
+    uint8_t rsv1[2];
+    uint8_t k[NPRESET_MAX][NK_MAX];      /* each preset's knobs, as changed (room for more of both) */
+    uint8_t rsv2[16];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty, piano_ok, bk_hold;
@@ -72,19 +105,27 @@ static void settings_defaults(void)
     uint32_t i, j;
     set.magic = SET_MAGIC;
     set.preset = 0; set.hold = 0; set.octave = 0; set.rsv = 0;
-    for (i = 0; i < NPRESET; i++)
-        for (j = 0; j < NK; j++) set.k[i][j] = PRESET_K[i][j];
+    for (i = 0; i < NPRESET_MAX; i++)
+        for (j = 0; j < NK_MAX; j++) set.k[i][j] = i < NPRESET && j < NK ? PRESET_K[i][j] : 0u;
+    set.nk = NK; set.np = NPRESET;
 }
 
 static void settings_load(void)
 {
     uint32_t i, j, bad = 0;
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC ||
-        set.preset >= NPRESET || set.hold > 1u || set.octave < -2 || set.octave > 2)
+        set.preset >= NPRESET || set.hold > 1u || set.octave < -2 || set.octave > 2 || set.nk > NK || set.np > NPRESET)
         bad = 1;
-    for (i = 0; !bad && i < NPRESET; i++)
+    for (i = 0; !bad && i < NPRESET; i++)   /* the presets and knobs these settings did not know yet: as they came */
         for (j = 0; j < NK; j++)
-            if (set.k[i][j] > (j == K_LTARGET ? NLFO_TARGET - 1u : 100u)) bad = 1;
+            if (i >= set.np || j >= set.nk) set.k[i][j] = PRESET_K[i][j];
+    if (!bad) { set.nk = NK; set.np = NPRESET; }
+    for (i = 0; !bad && i < NPRESET; i++)
+        for (j = 0; j < NK; j++) {
+            uint32_t nn;
+            knob_names((int)j, &nn);
+            if (set.k[i][j] > (nn ? nn - 1u : 100u)) bad = 1;
+        }
     if (bad) settings_defaults();
 }
 
@@ -100,6 +141,8 @@ static void send_params(void)
     p.atk = F(K_ATK); p.rel = F(K_REL); p.pedal = F(K_PEDAL); p.freeze = F(K_FREEZE);
     p.lrate = F(K_LRATE); p.ldepth = F(K_LDEPTH); p.wobble = F(K_WOBBLE); p.ltarget = k[K_LTARGET];
     p.rsize = F(K_RSIZE); p.rmix = F(K_RMIX); p.delay = F(K_DELAY); p.felt = F(K_FELT);
+    p.rev = F(K_REV); p.halo = k[K_HALO]; p.hamt = F(K_HAMT); p.width = F(K_WIDTH);
+    p.tex = k[K_TEX]; p.tlev = F(K_TLEV); p.tchar = F(K_TCHAR); p.treact = F(K_TREACT);
 #undef F
     g_params(&p);
 }
@@ -318,7 +361,11 @@ static void value_text(int which, char *t)   /* a knob's value as shown */
 {
     t[0] = 0;
     if (which == K_PRESET) { text_cat(t, PRESET_NAME[set.preset]); return; }
-    if (which == K_LTARGET) { text_cat(t, TARGET_NAME[kv()[K_LTARGET] % NLFO_TARGET]); return; }
+    {
+        uint32_t nn;
+        const char *const *nm = knob_names(which, &nn);
+        if (nm) { text_cat(t, nm[kv()[which] % nn]); return; }
+    }
     int_text(kv()[which], t);
 }
 static const char *knob_name(int which) { return which == K_PRESET ? "PRESET" : K_NAME[which]; }
@@ -339,7 +386,8 @@ static void knob_turn(int which, int32_t e)
     uint8_t *k = kv();
     int32_t v;
     if (which == K_PRESET) { preset_step(e > 0 ? 1 : -1); return; }
-    if (which == K_LTARGET) v = clamp((int32_t)k[which] + (e > 0 ? 1 : -1), 0, NLFO_TARGET - 1);
+    uint32_t nn;
+    if (knob_names(which, &nn)) v = clamp((int32_t)k[which] + (e > 0 ? 1 : -1), 0, (int32_t)nn - 1);
     else v = clamp((int32_t)k[which] + e * (e > 1 || e < -1 ? 3 : 2), 0, 100);   /* a quick turn goes further */
     if (v == k[which]) return;
     k[which] = (uint8_t)v;
@@ -401,6 +449,8 @@ static void input(void)
         case B_ENV: page_go(PG_ENV); break;
         case B_LFO: page_go(PG_LFO); break;
         case B_EDIT: page_go(PG_EDIT); break;
+        case B_GLO: page_go(PG_MAGIC); break;
+        case B_ARP: page_go(PG_TEX); break;
         case B_HOME: ui.home_t = now ? now : 1u; page_go(PG_MAIN); break;
         case B_PLAY: ui.play_t = now ? now : 1u; break;
         case B_OCTDN: octave_step(-1); break;
@@ -449,7 +499,7 @@ static void input(void)
     /* the lights: the page's button, PLAY while HOLD is on, SAVE when something changed; the keys down bright, the
      * held notes' keys dim */
     {
-        static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX};
+        static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX, B_GLO, B_ARP};
         lit_btn = 1u << PB[ui.page];
         if (set.hold) lit_btn |= 1u << B_PLAY | LED_PLAY_GREEN;
         if (set_dirty) lit_btn |= 1u << B_SAVE;
@@ -543,15 +593,16 @@ static void draw_knobs(int32_t y0, uint32_t now)
         int which = PAGE_K[ui.page][i];
         int32_t x = 4 + (int32_t)i * 59, wbar = 53, fill;
         int lit = ui.turned_at[i] && now - ui.turned_at[i] < 500u;
+        uint32_t nn;
         char t[24];
         cv_text(x, y0, &FONT_XS, knob_name(which), lit ? COL_IVORY : COL_LABEL);
         value_text(which, t);
         if (which == K_PRESET) {         /* the short name: a cell is 59 pixels wide */
             cv_text(x, y0 + 16, &FONT_B, PRESET_SHORT[set.preset], lit ? COL_IVORY : COL_GOLD);
             fill = wbar * ((int32_t)set.preset + 1) / NPRESET;
-        } else if (which == K_LTARGET) {
-            cv_text(x, y0 + 16, &FONT_XS, t, COL_GOLD);
-            fill = wbar * ((int32_t)kv()[which] + 1) / NLFO_TARGET;
+        } else if (knob_names(which, &nn)) {
+            cv_text(x, y0 + 16, &FONT_B, t, lit ? COL_IVORY : COL_GOLD);
+            fill = wbar * ((int32_t)kv()[which] + 1) / (int32_t)nn;
         } else {
             cv_text(x, y0 + 14, &FONT_M, t, lit ? COL_IVORY : COL_GOLD);
             fill = wbar * (int32_t)kv()[which] / 100;

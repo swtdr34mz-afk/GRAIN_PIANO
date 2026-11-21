@@ -36,6 +36,8 @@ static uint32_t ck[CK_MAX] PLAT_POOL;   /* the decoder's state: predictor (low 1
 static uint16_t ck_gain[CK_MAX] PLAT_POOL;   /* a grain's lift there, Q8 (256 = as it is) */
 static float rv_line[4][RV_MAXL] PLAT_POOL;
 static int16_t dl_buf[2][DL_N] PLAT_POOL;
+#define RB_N 4096u                      /* a backwards grain's buffer: 186 ms of the sample */
+static int16_t rbuf[G_NREV][RB_N] PLAT_POOL;
 
 /* ------------------------------------------------------------------ the samples --- */
 typedef struct { uint8_t root, sidx, lidx, pad; int16_t spred, lpred; uint32_t off, len, loop; } smp_ent_t;
@@ -208,6 +210,8 @@ typedef struct {
 typedef struct {
     uint8_t on, v;
     dec_t d;
+    uint8_t rev, rb;                    /* played backwards, out of buffer rb (decoded into it at its birth) */
+    float rpos;                         /* where in that buffer */
     float s0, s1, frac, rmul, step, ph, inc, amp, pl, pr, gl, gr;   /* gl, gr: its gain this chunk, each side */
 } grain_t;
 
@@ -225,6 +229,13 @@ static struct {
     float rv_hpl, rv_hpr;
     float gain_s;
     uint32_t glimit, gcalm;             /* grains allowed now (g_shed lowers it, a calm second raises it again) */
+    uint32_t rb_busy;                   /* the backwards buffers in use (bits) */
+    uint8_t rev_born;                   /* a backwards grain born this chunk (one a chunk: its decoding takes time) */
+    float act;                          /* how much is being played, 0..1, smoothed (the texture's REACT) */
+    /* the textures */
+    float tx_lp[4], tx_hp[2], tx_svl[2], tx_svb[2], tx_ph, tx_ph2, tx_walk, tx_gust, tx_env[2];
+    float dr_y1[4], dr_y2[4], dr_a1[4], dr_a2[4], dr_pl[4], dr_pr[4];   /* rain drops: four resonators */
+    uint8_t dr_next;
 } E;
 static const float RV_BASE[4] = {1559.0f, 1907.0f, 2341.0f, 2789.0f};
 
@@ -263,6 +274,7 @@ void g_shed(void)
 }
 
 /* ------------------------------------------------------------------ notes --- */
+static void grain_off(grain_t *g);
 static void voice_strike(voice_t *v, int note, float vel)
 {
     const gparams_t *p = &E.p;
@@ -316,7 +328,7 @@ static void voice_tick(voice_t *v)
     v->kf *= 0.35f;
     if (v->kf > 0.01f) return;
     for (i = 0; i < G_NG; i++)
-        if (E.g[i].on && &E.v[E.g[i].v] == v) E.g[i].on = 0;
+        if (E.g[i].on && &E.v[E.g[i].v] == v) grain_off(&E.g[i]);
     v->ng = 0;
     v->aenv = 0.0f;
     voice_strike(v, v->pnote, v->pvel);
@@ -343,6 +355,7 @@ static void run_commands(void)
         case CMD_PANIC:
             for (i = 0; i < G_NV; i++) { E.v[i].on = 0; E.v[i].ng = 0; }
             for (i = 0; i < G_NG; i++) E.g[i].on = 0;
+            E.rb_busy = 0;
             zero(rv_line, sizeof rv_line);
             zero(dl_buf, sizeof dl_buf);
             break;
@@ -381,16 +394,44 @@ static void spawn(int vi, float lfo, float size_s, float gnorm)
         float r = rndu();
         semis += r < 0.6f ? 12.0f : r < 0.85f ? 7.0f : r < 0.95f ? 19.0f : -12.0f;
     }
+    if (p->halo != HALO_OFF && p->halo < NHALO && rndu() < p->hamt) {   /* HALO: up into the chord's intervals */
+        static const int8_t IV[NHALO][4] = {{0, 0, 0, 0}, {12, 12, 12, 12}, {7, 7, 7, 7}, {7, 12, 7, 12},
+                                            {4, 7, 12, 16}, {3, 7, 12, 15}, {5, 7, 12, 14}, {4, 7, 11, 14}};
+        semis += (float)IV[p->halo][(E.rng >> 7) & 3u];
+    }
     g->rmul = fm_exp2f(semis * (1.0f / 12.0f));
     g->ph = 0.0f;
     g->inc = 1.0f / (size_s * SR * (1.0f + 0.35f * p->spray * rnd()));
-    pan = fm_clampf(v->pan * 0.6f + rnd() * (0.2f + 0.7f * p->spray), -1.0f, 1.0f);
+    g->rev = 0;
+    if (p->rev > 0.0f && !E.rev_born && rndu() < p->rev) {   /* backwards: the stretch it plays, decoded into a buffer */
+        uint32_t b, k, span;
+        float step = v->rate * g->rmul;
+        for (b = 0; b < G_NREV && (E.rb_busy >> b & 1u); b++) {}
+        if (b < G_NREV && step > 0.0f) {
+            span = (uint32_t)(step / g->inc) + 3u;
+            if (span > RB_N) { span = RB_N; g->inc = step / (float)(RB_N - 3u); }   /* (a shorter grain) */
+            dec_seek(&g->d, v->e, ip);
+            for (k = 0; k < span; k++) rbuf[b][k] = (int16_t)dec_next(&g->d);
+            g->rev = 1; g->rb = (uint8_t)b; g->rpos = (float)(span - 2u);
+            E.rb_busy |= 1u << b;
+            E.rev_born = 1;
+        }
+    }
+    pan = fm_clampf(v->pan * 0.6f + rnd() * (0.2f + 0.7f * p->spray) * (0.3f + 1.4f * p->width), -1.0f, 1.0f);
     g->pl = fm_sqrtf(0.5f * (1.0f - pan));
     g->pr = fm_sqrtf(0.5f * (1.0f + pan));
     g->amp = gnorm * (0.75f + 0.25f * rndu()) * (float)ck_gain[ck_off[v->e] + (ip >> CK_SH)] * (1.0f / 256.0f);
     g->v = (uint8_t)vi;
     g->on = 1;
     v->ng++;
+}
+
+static void grain_off(grain_t *g)
+{
+    voice_t *v = &E.v[g->v];
+    g->on = 0;
+    if (g->rev) E.rb_busy &= ~(1u << g->rb);
+    if (v->ng) v->ng--;
 }
 
 static inline float window(float ph)    /* 0 .. 1 .. 0, smooth at both ends */
@@ -412,6 +453,94 @@ static inline float rd_line(const float *b, uint32_t n, uint32_t w, float d)   /
     return b[i0] + (b[i1] - b[i0]) * fr;
 }
 
+/* ------------------------------------------------------------------ the textures --- */
+/* Sounds beside the piano, made here (no recordings: nothing to license, next to no memory), each with a CHARACTER from
+ * light to heavy: RAIN (a soft hiss and drops: four resonators struck at random), VINYL (crackle and dust), TAPE (hiss
+ * that breathes), WIND (noise through a band-pass that wanders, in gusts), SEA (waves: noise swelling and opening in
+ * slow cycles, each side its own), ROOM (the air of a quiet room). */
+static void texture_chunk(const gparams_t *p, uint32_t cn)
+{
+    float c = p->tchar;
+    E.tx_ph += (float)cn / (SR * (11.0f - 4.0f * c)); if (E.tx_ph >= 1.0f) E.tx_ph -= 1.0f;   /* SEA: a wave */
+    E.tx_ph2 += (float)cn / (SR * (8.3f - 3.0f * c)); if (E.tx_ph2 >= 1.0f) E.tx_ph2 -= 1.0f;
+    E.tx_walk = fm_clampf(E.tx_walk + rnd() * 0.02f, 0.0f, 1.0f);                             /* WIND: where it blows */
+    E.tx_gust += (fm_clampf(0.5f + rnd() * 2.0f, 0.0f, 1.0f) - E.tx_gust) * 0.004f * (1.0f + c);
+}
+
+static void drop_strike(float c)        /* RAIN: a drop, somewhere */
+{
+    int d = E.dr_next++ & 3;
+    float f = 900.0f + 4200.0f * rndu() * rndu(), r = fm_expf(-1.0f / ((0.002f + 0.01f * rndu()) * SR));
+    float a = (0.15f + 0.85f * rndu() * rndu()) * (0.6f + 0.4f * c), pan = rnd() * 0.9f;
+    E.dr_a1[d] = 2.0f * r * fm_cosf(6.2831853f * f / SR);
+    E.dr_a2[d] = -r * r;
+    E.dr_y1[d] += a;
+    E.dr_pl[d] = fm_sqrtf(0.5f * (1.0f - pan));
+    E.dr_pr[d] = fm_sqrtf(0.5f * (1.0f + pan));
+}
+
+static void texture(const gparams_t *p, float *l, float *r)
+{
+    float nl = rnd(), nr = rnd(), c = p->tchar, ol = 0.0f, orr = 0.0f;
+    int k;
+    switch (p->tex) {
+    case TEX_RAIN:
+        E.tx_lp[0] += 0.08f * (nl - E.tx_lp[0]); E.tx_lp[1] += 0.08f * (nr - E.tx_lp[1]);
+        ol = E.tx_lp[0] * (0.35f + 0.4f * c); orr = E.tx_lp[1] * (0.35f + 0.4f * c);
+        if (rndu() < (3.0f + 70.0f * c * c) / SR) drop_strike(c);
+        for (k = 0; k < 4; k++) {
+            float y = E.dr_a1[k] * E.dr_y1[k] + E.dr_a2[k] * E.dr_y2[k];
+            E.dr_y2[k] = E.dr_y1[k]; E.dr_y1[k] = y;
+            ol += y * E.dr_pl[k] * 0.22f; orr += y * E.dr_pr[k] * 0.22f;
+        }
+        break;
+    case TEX_VINYL:
+        E.tx_hp[0] += 0.02f * (nl - E.tx_hp[0]);
+        ol = orr = (nl - E.tx_hp[0]) * 0.03f;           /* dust */
+        if (rndu() < (8.0f + 260.0f * c * c) / SR) {    /* a crackle */
+            float a = rndu(); a = a * a * a * (rnd() < 0.0f ? -1.0f : 1.0f);
+            E.tx_env[0] = a; E.tx_env[1] = a * (0.4f + 0.6f * rndu());
+        }
+        ol += E.tx_env[0] * 0.9f; orr += E.tx_env[1] * 0.9f;
+        E.tx_env[0] *= 0.55f; E.tx_env[1] *= 0.55f;
+        E.tx_lp[0] += 0.0015f * (nl - E.tx_lp[0]);     /* the record's rumble */
+        ol += E.tx_lp[0] * 0.5f; orr += E.tx_lp[0] * 0.5f;
+        break;
+    case TEX_TAPE: {
+        float br = 0.85f + 0.15f * fm_sin_turns(E.tx_ph2) + 0.1f * c * fm_sin_turns(E.tx_ph);
+        E.tx_hp[0] += 0.05f * (nl - E.tx_hp[0]); E.tx_hp[1] += 0.05f * (nr - E.tx_hp[1]);
+        E.tx_lp[0] += 0.45f * ((nl - E.tx_hp[0]) - E.tx_lp[0]); E.tx_lp[1] += 0.45f * ((nr - E.tx_hp[1]) - E.tx_lp[1]);
+        ol = E.tx_lp[0] * (0.12f + 0.16f * c) * br; orr = E.tx_lp[1] * (0.12f + 0.16f * c) * br;
+        break;
+    }
+    case TEX_WIND: {
+        float f = 2.0f * fm_sin_pi((220.0f + 900.0f * E.tx_walk + 500.0f * c * E.tx_gust) / SR), q = 0.35f;
+        float g = (0.25f + 0.75f * E.tx_gust) * (0.5f + 0.5f * c) * 1.2f;
+        for (k = 0; k < 2; k++) {
+            float in = k ? nr : nl, hi = in - E.tx_svl[k] - q * E.tx_svb[k];
+            E.tx_svb[k] += f * hi; E.tx_svl[k] += f * E.tx_svb[k];
+        }
+        ol = E.tx_svb[0] * g; orr = E.tx_svb[1] * g;
+        break;
+    }
+    case TEX_SEA: {
+        float wl = fm_sin_turns(E.tx_ph), wr = fm_sin_turns(E.tx_ph2), el = wl * wl, er = wr * wr;
+        float al = 0.01f + 0.12f * el * (0.5f + c), ar = 0.01f + 0.12f * er * (0.5f + c);
+        E.tx_lp[0] += al * (nl - E.tx_lp[0]); E.tx_lp[1] += ar * (nr - E.tx_lp[1]);
+        ol = E.tx_lp[0] * (0.25f + 1.1f * el) * (0.6f + 0.6f * c);
+        orr = E.tx_lp[1] * (0.25f + 1.1f * er) * (0.6f + 0.6f * c);
+        break;
+    }
+    case TEX_ROOM:
+        E.tx_lp[0] += (0.04f + 0.12f * c) * (nl - E.tx_lp[0]); E.tx_lp[1] += (0.04f + 0.12f * c) * (nr - E.tx_lp[1]);
+        E.tx_lp[2] += 0.004f * (nl - E.tx_lp[2]);
+        ol = E.tx_lp[0] * 0.18f + E.tx_lp[2] * 0.6f; orr = E.tx_lp[1] * 0.18f + E.tx_lp[2] * 0.6f;
+        break;
+    default: break;
+    }
+    *l = ol; *r = orr;
+}
+
 /* ------------------------------------------------------------------ the render --- */
 void g_render(int32_t *lr, uint32_t n, float gain)
 {
@@ -427,6 +556,8 @@ void g_render(int32_t *lr, uint32_t n, float gain)
         float felt_atk, rsc, t60, lpan = 0.0f, send_d, fb_d, wet, rv_dd[4];
         uint8_t live[G_NG];
         int ng_live = 0, j;
+        float act = 0.0f, txg;
+        E.rev_born = 0;
         /* ---- per chunk: the LFO, the wobble, the filters, the envelopes, the grains' births */
         E.lfo_ph += (float)cn * exp_range(p->lrate, 0.05f, 8.0f) / SR;
         if (E.lfo_ph >= 1.0f) E.lfo_ph -= 1.0f;
@@ -466,6 +597,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 while (p->pos * (len - 1.0f) + v->scan >= len) v->scan -= span;
             }
             if (v->dry_on && (v->dgt < 0.002f || v->denv < 0.0005f)) v->dry_on = 0;
+            v->rate = fm_exp2f(((float)v->note - (float)smp_e[v->e].root) * (1.0f / 12.0f)) * smp_ratio * pmul;
             if (grg > 0.0f && v->genv > 0.002f && !v->kill) {
                 v->gnext -= (float)cn;
                 while (v->gnext <= 0.0f) {
@@ -477,8 +609,9 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             /* done: let go, the piano silent, no grain left and none to come. A held voice stays (silent, it
              * may be), so its grains come back when DENSITY or MIX are turned up again */
             if (!v->held && !v->kill && !v->dry_on && v->ng == 0 && (v->genv <= 0.002f || grg <= 0.0f)) v->on = 0;
-            v->rate = fm_exp2f(((float)v->note - (float)smp_e[v->e].root) * (1.0f / 12.0f)) * smp_ratio * pmul;
+            if (v->on) act += v->amp * fm_maxf(v->genv * grg, v->denv * v->dgt * dryg) * v->aenv;
         }
+        E.act += (fm_minf(1.0f, act * 0.6f) - E.act) * (act * 0.6f > E.act ? 0.02f : 0.004f);
         ng_live = 0;
         for (i = 0; i < G_NG; i++)      /* the grains sounding: their step and gain for this chunk, in a short list */
             if (E.g[i].on) {
@@ -501,6 +634,12 @@ void g_render(int32_t *lr, uint32_t n, float gain)
         E.rv_mph += (float)cn * 0.6f / SR; if (E.rv_mph >= 1.0f) E.rv_mph -= 1.0f;
         for (i = 0; i < 4; i++)         /* the lines' slow wander (no metallic ring), per chunk */
             rv_dd[i] = E.rv_d[i] + (i & 1 ? 3.0f : -3.0f) * fm_sin_turns(E.rv_mph + 0.25f * (float)i) + 4.0f;
+        {                               /* each texture levelled: at LEVEL 100 about as loud as the piano */
+            static const float TG[NTEX] = {0.0f, 2.3f, 3.5f, 5.0f, 3.0f, 2.0f, 6.0f};
+            txg = p->tex != TEX_OFF && p->tex < NTEX ?
+                  p->tlev * fm_sqrtf(p->tlev) * 0.6f * TG[p->tex] * (1.0f - p->treact + p->treact * E.act) : 0.0f;
+        }
+        if (txg > 0.0f) texture_chunk(p, cn);
         send_d = p->delay * 0.8f;
         fb_d = 0.2f + 0.55f * p->delay;
         wet = p->rmix;
@@ -529,10 +668,21 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 float o;
                 if (!g->on) continue;
                 g->ph += g->inc;
-                if (g->ph >= 1.0f) { voice_t *v = &E.v[g->v]; g->on = 0; if (v->ng) v->ng--; continue; }
-                g->frac += g->step;
-                while (g->frac >= 1.0f) { g->s0 = g->s1; g->s1 = (float)dec_next(&g->d); g->frac -= 1.0f; }
-                o = (g->s0 + (g->s1 - g->s0) * g->frac) * window(g->ph);
+                if (g->ph >= 1.0f) { grain_off(g); continue; }
+                if (g->rev) {           /* backwards, out of its buffer */
+                    int32_t i0;
+                    float fr;
+                    g->rpos -= g->step;
+                    if (g->rpos < 0.0f) { grain_off(g); continue; }
+                    i0 = (int32_t)g->rpos;
+                    fr = g->rpos - (float)i0;
+                    o = (float)rbuf[g->rb][i0] + (float)(rbuf[g->rb][i0 + 1] - rbuf[g->rb][i0]) * fr;
+                } else {
+                    g->frac += g->step;
+                    while (g->frac >= 1.0f) { g->s0 = g->s1; g->s1 = (float)dec_next(&g->d); g->frac -= 1.0f; }
+                    o = g->s0 + (g->s1 - g->s0) * g->frac;
+                }
+                o *= window(g->ph);
                 L += o * g->gl;
                 R += o * g->gr;
             }
@@ -545,6 +695,12 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 float k = 1.0f + 2.0f * p->felt;
                 L += p->felt * (fm_tanhf(L * k) / k - L) * 0.6f;
                 R += p->felt * (fm_tanhf(R * k) / k - R) * 0.6f;
+            }
+            if (txg > 0.0f) {           /* the texture, beside the piano (into the delay and the room too) */
+                float tl, tr;
+                texture(p, &tl, &tr);
+                L += tl * txg;
+                R += tr * txg;
             }
             /* the ping-pong delay */
             {
@@ -598,6 +754,8 @@ void g_render(int32_t *lr, uint32_t n, float gain)
         E.dl_lpl = fm_flush(E.dl_lpl); E.dl_lpr = fm_flush(E.dl_lpr);
         for (i = 0; i < 4; i++) E.rv_lp[i] = fm_flush(E.rv_lp[i]);
         for (i = 0; i < G_NV; i++) E.v[i].vlp = fm_flush(E.v[i].vlp);
+        for (i = 0; i < 4; i++) { E.tx_lp[i] = fm_flush(E.tx_lp[i]); E.dr_y1[i] = fm_flush(E.dr_y1[i]); E.dr_y2[i] = fm_flush(E.dr_y2[i]); }
+        for (i = 0; i < 2; i++) { E.tx_svl[i] = fm_flush(E.tx_svl[i]); E.tx_svb[i] = fm_flush(E.tx_svb[i]); }
     }
     {                                   /* for the screen */
         uint8_t m = 0;

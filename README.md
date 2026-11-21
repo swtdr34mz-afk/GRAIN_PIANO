@@ -26,8 +26,10 @@ note's pitch, taken from a point that moves through the sound (from the hammer t
 | ENV | ENVELOPE: ATTACK, RELEASE (the grains'), PEDAL (the piano's damper), FREEZE |
 | LFO | MOVEMENT: RATE, DEPTH, TARGET (position, pitch, filter, pan), WOBBLE (tape) |
 | FX | ROOM: ROOM (size), REVERB, DELAY, FELT (damped, warm) |
+| GLO | MAGIC: REVERSE (grains played backwards), HALO (octave, fifth, oct+5th, major, minor, sus, maj9), HALO MIX, WIDTH |
+| ARP | TEXTURE: TEXTURE (rain, vinyl, tape, wind, sea, room: made in the FM-1, no recordings), LEVEL, CHAR (light .. heavy), REACT (it follows your playing) |
 | K1..K4 | The page's four knobs |
-| PRESET | The preset: CONCERT GRAND, FELT PIANO, CLOUD, BROKEN TAPE, GLASS DUST. Each keeps your changes |
+| PRESET | The preset: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST. Each keeps your changes |
 | SELECT / ALGORITHM | POSITION and SPRAY, on every page |
 | SAVE | Keep the settings (lit: something changed) |
 

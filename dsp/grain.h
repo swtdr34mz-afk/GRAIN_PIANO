@@ -11,9 +11,12 @@
 
 #define G_SR 44100.0f
 #define G_NV 8                          /* voices (notes at once) */
+#define G_NREV 6                        /* grains played backwards at once (each a RAM buffer) */
 #define G_NG 24                         /* grains at once at most, shared by the voices (CLOUD at 16: 63 % CPU) */
 
 enum { LFO_POS, LFO_PITCH, LFO_FILTER, LFO_PAN, NLFO_TARGET };
+enum { HALO_OFF, HALO_OCT, HALO_FIFTH, HALO_OCT5, HALO_MAJ, HALO_MIN, HALO_SUS, HALO_MAJ9, NHALO };
+enum { TEX_OFF, TEX_RAIN, TEX_VINYL, TEX_TAPE, TEX_WIND, TEX_SEA, TEX_ROOM, NTEX };
 
 typedef struct {                        /* every value 0..1, but ltarget (LFO_*) */
     float tone, dyn, mix;               /* SEL: brightness, velocity response, piano (0) .. grains (1) */
@@ -21,7 +24,10 @@ typedef struct {                        /* every value 0..1, but ltarget (LFO_*)
     float atk, rel, pedal, freeze;      /* ENV: attack, the grains' release, the piano's damper (pedal), scan .. frozen */
     float lrate, ldepth, wobble;        /* LFO: rate, depth, tape wobble */
     float rsize, rmix, delay, felt;     /* FX: room size, reverb mix, delay, felt (damped, warm) */
-    uint8_t ltarget;
+    float rev, hamt, width;             /* MAGIC: the share of grains played backwards, of grains in the HALO's
+                                         * intervals, the grains' stereo width */
+    float tlev, tchar, treact;          /* TEXTURE: level, character (light .. heavy), how much it follows the playing */
+    uint8_t ltarget, halo, tex;         /* LFO_*, HALO_*, TEX_* */
 } gparams_t;
 
 void g_init(void);
