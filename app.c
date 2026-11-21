@@ -816,7 +816,8 @@ static void input(void)
         int32_t kk = held_key(i);
         if (kk >= 0) dim_keys |= 1u << kk;
     }
-    plat_lights(lit_btn, lit_keys, 0, dim_keys, 1);
+    plat_lights(lit_btn, lit_keys, ((1u << NB) - 1u) & ~lit_btn, dim_keys, 2);   /* every button glows a little, to be
+                                                                                 * found in the dark; the lit ones bright */
     {                                    /* LIGHT: the roots' keys a little brighter */
         uint32_t mid = 0;
         for (k = 0; LIGHT && k < NKEYS; k++) {
