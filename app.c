@@ -24,6 +24,7 @@
  * and octaves. Part of the unity build (device/unity.c, host/plat_host.c), after the platform. */
 #include "fastmath.h"
 #include "grain.h"
+#include "piano_data.h"              /* the samples, in the image (tools/gen_piano_h.py) */
 
 /* ------------------------------------------------------------------ the knobs --- */
 enum { K_TONE, K_DYN, K_MIX, K_SIZE, K_DENS, K_POS, K_SPRAY, K_ATK, K_REL, K_PEDAL, K_FREEZE, K_LRATE, K_LDEPTH,
@@ -241,12 +242,9 @@ static void hold_set(int on, uint32_t keys)
 /* ------------------------------------------------------------------ the platform's calls --- */
 void app_init(void)
 {
-    uint32_t rl = 0;
-    const uint8_t *rp;
     settings_load();
     g_init();
-    rp = plat_res(&rl);
-    piano_ok = (uint8_t)g_samples(rp, rl);
+    piano_ok = (uint8_t)g_samples(piano_data, PIANO_DATA_LEN);
     send_params();
 }
 
@@ -595,6 +593,8 @@ static void draw_keys(void)
     t[0] = set.octave < 0 ? '-' : '+'; t[1] = (char)('0' + (set.octave < 0 ? -set.octave : set.octave)); t[2] = 0;
     cv_text(176, 36, &FONT_XS, t, COL_IVORY);
     if (set_dirty) cv_text(204, 36, &FONT_XS, "SAVE", COL_EMBER);
+    t[0] = 0; text_cat(t, "CPU "); int_text((int32_t)plat_cpu_pct(), t + 4); text_cat(t, "%");
+    cv_text(96, 36, &FONT_XS, t, plat_cpu_pct() > 85u ? COL_EMBER : COL_LABEL);   /* the audio's load (for the tests) */
     cv_blit(0, 184);
 }
 

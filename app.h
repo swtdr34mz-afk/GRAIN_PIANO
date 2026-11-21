@@ -15,12 +15,10 @@
 enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_NOBJ };
 #define APP_STORE_MAP {0xFC000u, 0xDC000u}
 
-/* the resource region: the grand piano's samples (res/piano.bin, tools/make_piano.py): the same place and the same
- * bytes as CHORD RUN's, so switching between the two firmwares never needs them sent again */
-#define APP_RES_BASE 0x97000u
-#define APP_RES_SECTORS 69u
+/* the grand piano's samples (res/piano.bin) are in the image itself (tools/gen_piano_h.py), not in the resource region:
+ * nothing to send apart, nothing that can be missing */
 
-/* backup and restore over USB (needed by the resource region's transfer): the settings */
+/* backup and restore over USB: the settings */
 #define APP_BACKUP_OBJS {OBJ_SETTINGS}
 #define APP_BACKUP_MAGIC 0x4E415247u            /* "GRAN" */
 #define APP_BACKUP_VERSION 1u

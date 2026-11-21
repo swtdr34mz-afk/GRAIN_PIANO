@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 swtdr34mz */
-/* GRAIN PIANO's sound engine: one instrument, a sampled grand piano (the Salamander Grand Piano V3, nine notes in the
- * resource region, as CHORD RUN's) that a granulator reads in grains, straight from the samples in the flash.
+/* GRAIN PIANO's sound engine: one instrument, a sampled grand piano (the Salamander Grand Piano V3, nine notes, as CHORD RUN's,
+ * carried in the image) that a granulator reads in grains, straight from the samples in the flash.
  * Eight voices; each plays the piano note itself (the dry piano) and sends grains out of the same sample, at the
  * note's pitch, from a position that scans through the sample or stands still (FREEZE). Then a tone filter, a soft
  * "felt", a ping-pong delay and a reverb of variable size.
@@ -25,7 +25,7 @@ typedef struct {                        /* every value 0..1, but ltarget (LFO_*)
 } gparams_t;
 
 void g_init(void);
-/* the piano's samples (the resource region's payload, tools/make_piano.py: "PNO1"); 1 = taken, 0 = none there */
+/* the piano's samples (res/piano.bin, tools/make_piano.py: "PNO1"); 1 = taken, 0 = none there */
 int g_samples(const uint8_t *p, uint32_t len);
 void g_params(const gparams_t *p);
 void g_note_on(int note, float vel);    /* MIDI note, velocity 0..1; the same note again strikes it again */
