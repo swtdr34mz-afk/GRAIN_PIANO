@@ -5,6 +5,9 @@ into grains. Inspired by [Tonitor](https://github.com/nzimas/tonitor) (Nuno Zima
 [fm1-base](https://github.com/charlesvestal/fm1-base) and [felucca-bsp](https://github.com/hugelton/felucca-bsp).
 The piano is the **Salamander Grand Piano V3** by Alexander Holm (CC-BY 3.0), the same samples as CHORD RUN's.
 
+**Manual:** [Deutsch](docs/HANDBUCH.md) ([PDF](docs/GRAIN_PIANO_HANDBUCH.pdf)) · [English](docs/MANUAL.md)
+([PDF](docs/GRAIN_PIANO_MANUAL.pdf))
+
 > Unofficial: not made, endorsed or supported by M-VAVE. Installing it replaces the FM-1's firmware and may void any
 > warranty. At your own risk.
 
