@@ -193,9 +193,11 @@ void g_params(const gparams_t *p)       /* into the buffer the render does not r
 /* ------------------------------------------------------------------ state (render side) --- */
 typedef struct {
     uint8_t on, held, note, e, dry_on, ng;
+    uint8_t kill, pnote, pheld;         /* taken for another note: it fades out in ~3 ms first (no click), then pnote */
+    float pvel, kf;                     /* that note's velocity; the fade (1 = none) */
     float vel, amp, pan, rate;          /* rate: the step through its sample for its pitch (per chunk, with the wobble) */
     dec_t dry;
-    float d0, d1, dfrac, dg;            /* the dry voice: two decoded samples, where between, its own fade (loop passes) */
+    float d0, d1, dfrac, dg, dgt;           /* the dry voice: two decoded samples, where between, its own fade (loop passes) */
     float denv, aenv, genv;             /* the damper (1 until released), the attack, the grains' envelope */
     float vlp, va;                      /* the velocity's brightness on the dry voice: its low-pass and coefficient */
     float scan;                         /* how far the grains' position has moved since the note began (samples) */
@@ -273,10 +275,16 @@ static void voice_strike(voice_t *v, int note, float vel)
     v->va = 1.0f - fm_expf(-6.2831853f * exp_range(bright, 900.0f, 20000.0f) / SR);
     v->pan = fm_clampf(((float)note - 66.0f) * (1.0f / 40.0f), -0.6f, 0.6f);
     dec_start(&v->dry, v->e);
-    v->d0 = 0.0f; v->d1 = (float)dec_next(&v->dry); v->dfrac = 0.0f; v->dg = 1.0f; v->dry_on = 1;
-    v->denv = 1.0f; v->genv = 1.0f;
+    v->d0 = 0.0f; v->d1 = (float)dec_next(&v->dry); v->dfrac = 0.0f; v->dg = v->dgt = 1.0f; v->dry_on = 1;
+    v->denv = 1.0f; v->genv = 1.0f; v->kf = 1.0f; v->kill = 0;
     v->scan = 0.0f;
     v->gnext = 0.0f;
+}
+
+/* a sounding voice taken for a note: it fades out first, and the note starts when it is silent (voice_tick) */
+static void voice_take(voice_t *v, int note, float vel)
+{
+    v->kill = 1; v->pnote = (uint8_t)note; v->pvel = vel; v->pheld = 1;
 }
 
 static void note_on(int note, float vel)
@@ -284,20 +292,35 @@ static void note_on(int note, float vel)
     int i, best = -1;
     uint32_t oldest = 0xFFFFFFFFu;
     if (!smp_n) return;
-    for (i = 0; i < G_NV; i++)          /* the same note: struck again */
-        if (E.v[i].on && E.v[i].note == note) { voice_strike(&E.v[i], note, vel); return; }
+    for (i = 0; i < G_NV; i++)          /* the same note: struck again (or about to be) */
+        if (E.v[i].on && ((E.v[i].kill && E.v[i].pnote == note) || (!E.v[i].kill && E.v[i].note == note))) {
+            voice_take(&E.v[i], note, vel);
+            return;
+        }
     for (i = 0; i < G_NV; i++)
-        if (!E.v[i].on) { E.v[i].aenv = 0.0f; voice_strike(&E.v[i], note, vel); return; }
+        if (!E.v[i].on) { E.v[i].aenv = 0.0f; E.v[i].ng = 0; voice_strike(&E.v[i], note, vel); return; }
     for (i = 0; i < G_NV; i++)          /* none free: the oldest released one, else the oldest */
-        if (!E.v[i].held && E.v[i].age < oldest) { oldest = E.v[i].age; best = i; }
+        if (!E.v[i].kill && !E.v[i].held && E.v[i].age < oldest) { oldest = E.v[i].age; best = i; }
     if (best < 0)
         for (i = 0; i < G_NV; i++)
-            if (E.v[i].age < oldest) { oldest = E.v[i].age; best = i; }
-    for (i = 0; i < G_NG; i++)          /* its grains go with it */
-        if (E.g[i].on && E.g[i].v == best) E.g[i].on = 0;
-    E.v[best].ng = 0;
-    E.v[best].aenv = 0.0f;
-    voice_strike(&E.v[best], note, vel);
+            if (!E.v[i].kill && E.v[i].age < oldest) { oldest = E.v[i].age; best = i; }
+    if (best < 0) best = 0;
+    voice_take(&E.v[best], note, vel);
+}
+
+/* per chunk: a voice fading out for another note; silent, its grains go and the note begins */
+static void voice_tick(voice_t *v)
+{
+    int i;
+    if (!v->kill) return;
+    v->kf *= 0.35f;
+    if (v->kf > 0.01f) return;
+    for (i = 0; i < G_NG; i++)
+        if (E.g[i].on && &E.v[E.g[i].v] == v) E.g[i].on = 0;
+    v->ng = 0;
+    v->aenv = 0.0f;
+    voice_strike(v, v->pnote, v->pvel);
+    v->held = v->pheld;
 }
 
 static void run_commands(void)
@@ -309,11 +332,13 @@ static void run_commands(void)
         switch (c.t) {
         case CMD_ON: note_on(c.note, c.vel); break;
         case CMD_OFF:
-            for (i = 0; i < G_NV; i++)
-                if (E.v[i].on && E.v[i].note == c.note) E.v[i].held = 0;
+            for (i = 0; i < G_NV; i++) {
+                if (E.v[i].on && E.v[i].kill && E.v[i].pnote == c.note) E.v[i].pheld = 0;
+                else if (E.v[i].on && E.v[i].note == c.note) E.v[i].held = 0;
+            }
             break;
         case CMD_ALLOFF:
-            for (i = 0; i < G_NV; i++) E.v[i].held = 0;
+            for (i = 0; i < G_NV; i++) { E.v[i].held = 0; E.v[i].pheld = 0; }
             break;
         case CMD_PANIC:
             for (i = 0; i < G_NV; i++) { E.v[i].on = 0; E.v[i].ng = 0; }
@@ -431,6 +456,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
         for (i = 0; i < G_NV; i++) {
             voice_t *v = &E.v[i];
             if (!v->on) continue;
+            voice_tick(v);
             v->aenv = fm_minf(1.0f, v->aenv + atk_step);
             if (!v->held) { v->denv *= d_rel; v->genv *= g_rel; }
             v->scan += (float)cn * smp_ratio * scan_k;
@@ -439,8 +465,8 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 float len = (float)e->len, span = len - (float)e->loop;
                 while (p->pos * (len - 1.0f) + v->scan >= len) v->scan -= span;
             }
-            if (v->dry_on && (v->dg < 0.002f || v->denv < 0.0005f)) v->dry_on = 0;
-            if (grg > 0.0f && v->genv > 0.002f) {
+            if (v->dry_on && (v->dgt < 0.002f || v->denv < 0.0005f)) v->dry_on = 0;
+            if (grg > 0.0f && v->genv > 0.002f && !v->kill) {
                 v->gnext -= (float)cn;
                 while (v->gnext <= 0.0f) {
                     spawn(i, lfo, size_s, gnorm);
@@ -450,7 +476,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             }
             /* done: let go, the piano silent, no grain left and none to come. A held voice stays (silent, it
              * may be), so its grains come back when DENSITY or MIX are turned up again */
-            if (!v->held && !v->dry_on && v->ng == 0 && (v->genv <= 0.002f || grg <= 0.0f)) v->on = 0;
+            if (!v->held && !v->kill && !v->dry_on && v->ng == 0 && (v->genv <= 0.002f || grg <= 0.0f)) v->on = 0;
             v->rate = fm_exp2f(((float)v->note - (float)smp_e[v->e].root) * (1.0f / 12.0f)) * smp_ratio * pmul;
         }
         ng_live = 0;
@@ -458,7 +484,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             if (E.g[i].on) {
                 grain_t *g = &E.g[i];
                 const voice_t *v = &E.v[g->v];
-                float k = g->amp * v->genv * v->aenv * v->amp * grg * (1.0f / 32768.0f);
+                float k = g->amp * v->genv * v->aenv * v->amp * v->kf * grg * (1.0f / 32768.0f);
                 g->step = v->rate * g->rmul;
                 g->gl = k * g->pl;
                 g->gr = k * g->pr;
@@ -489,11 +515,12 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 while (v->dfrac >= 1.0f) {
                     uint32_t was = v->dry.pos;
                     v->d0 = v->d1; v->d1 = (float)dec_next(&v->dry); v->dfrac -= 1.0f;
-                    if (v->dry.pos < was) v->dg *= 0.7f;   /* back at the loop: it fades on, as a piano does */
+                    if (v->dry.pos < was) v->dgt *= 0.7f;  /* back at the loop: it fades on, as a piano does */
                 }
+                v->dg += (v->dgt - v->dg) * 0.0005f;   /* (gliding there: a step would tick) */
                 o = (v->d0 + (v->d1 - v->d0) * v->dfrac) * (1.0f / 32768.0f);
                 v->vlp += v->va * (o - v->vlp);
-                gv = v->vlp * v->dg * v->denv * v->aenv * v->amp * dryg;
+                gv = v->vlp * v->dg * v->denv * v->aenv * v->amp * v->kf * dryg;
                 L += gv * (0.7f - 0.4f * v->pan);
                 R += gv * (0.7f + 0.4f * v->pan);
             }

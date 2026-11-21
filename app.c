@@ -45,19 +45,17 @@ static const uint8_t PAGE_K[NPAGE][4] = {
 };
 
 /* ------------------------------------------------------------------ the presets --- */
-#define NPRESET 5
-static const char *const PRESET_NAME[NPRESET] = {"CONCERT GRAND", "FELT PIANO", "CLOUD", "BROKEN TAPE", "GLASS DUST"};
-static const char *const PRESET_SHORT[NPRESET] = {"CONCERT", "FELT", "CLOUD", "TAPE", "GLASS"};   /* (in a knob's cell) */
+#define NPRESET 3
+static const char *const PRESET_NAME[NPRESET] = {"CONCERT GRAND", "FELT PIANO", "CLOUD"};
+static const char *const PRESET_SHORT[NPRESET] = {"CONCERT", "FELT", "CLOUD"};   /* (in a knob's cell) */
 /* TONE DYN MIX | SIZE DENS POS SPRAY | ATK REL PEDAL FREEZE | RATE DEPTH TARGET WOBBLE | ROOM REVERB DELAY FELT (0..100) */
 static const uint8_t PRESET_K[NPRESET][NK] = {
     {72, 70, 10, 50, 25, 15, 10, 0, 35, 45, 0, 30, 0, LFO_POS, 0, 45, 22, 0, 0},
     {45, 55, 22, 60, 30, 25, 10, 2, 50, 60, 30, 20, 0, LFO_POS, 15, 35, 30, 10, 75},
     {60, 40, 85, 80, 65, 35, 30, 45, 80, 80, 85, 15, 40, LFO_POS, 10, 85, 55, 25, 10},
-    {50, 50, 60, 55, 50, 40, 25, 5, 55, 50, 50, 40, 30, LFO_PITCH, 70, 50, 35, 40, 40},
-    {90, 60, 75, 15, 85, 50, 80, 3, 60, 50, 70, 55, 35, LFO_PAN, 0, 75, 50, 30, 0},
 };
 
-#define SET_MAGIC 0x31505247u            /* "GRP1": the settings record; another magic loads defaults */
+#define SET_MAGIC 0x32505247u            /* "GRP2": the settings record; another magic loads defaults */
 typedef struct {
     uint32_t magic;
     uint8_t preset, hold;
