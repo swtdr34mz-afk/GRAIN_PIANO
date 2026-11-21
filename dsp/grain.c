@@ -206,7 +206,7 @@ typedef struct {
 typedef struct {
     uint8_t on, v;
     dec_t d;
-    float s0, s1, frac, rmul, step, ph, inc, amp, pl, pr;
+    float s0, s1, frac, rmul, step, ph, inc, amp, pl, pr, gl, gr;   /* gl, gr: its gain this chunk, each side */
 } grain_t;
 
 static struct {
@@ -399,7 +399,9 @@ void g_render(int32_t *lr, uint32_t n, float gain)
         const gparams_t *p = &E.p;
         uint32_t cn = n - c0 < CHUNK ? n - c0 : CHUNK;
         float lfo, pmul, wob, size_s, dens_hz, gnorm, interval, dryg, grg, fc, atk_step, d_rel, g_rel, scan_k;
-        float felt_atk, rsc, t60, lpan = 0.0f, send_d, fb_d, wet;
+        float felt_atk, rsc, t60, lpan = 0.0f, send_d, fb_d, wet, rv_dd[4];
+        uint8_t live[G_NG];
+        int ng_live = 0, j;
         /* ---- per chunk: the LFO, the wobble, the filters, the envelopes, the grains' births */
         E.lfo_ph += (float)cn * exp_range(p->lrate, 0.05f, 8.0f) / SR;
         if (E.lfo_ph >= 1.0f) E.lfo_ph -= 1.0f;
@@ -451,8 +453,17 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             if (!v->held && !v->dry_on && v->ng == 0 && (v->genv <= 0.002f || grg <= 0.0f)) v->on = 0;
             v->rate = fm_exp2f(((float)v->note - (float)smp_e[v->e].root) * (1.0f / 12.0f)) * smp_ratio * pmul;
         }
-        for (i = 0; i < G_NG; i++)
-            if (E.g[i].on) E.g[i].step = E.v[E.g[i].v].rate * E.g[i].rmul;
+        ng_live = 0;
+        for (i = 0; i < G_NG; i++)      /* the grains sounding: their step and gain for this chunk, in a short list */
+            if (E.g[i].on) {
+                grain_t *g = &E.g[i];
+                const voice_t *v = &E.v[g->v];
+                float k = g->amp * v->genv * v->aenv * v->amp * grg * (1.0f / 32768.0f);
+                g->step = v->rate * g->rmul;
+                g->gl = k * g->pl;
+                g->gr = k * g->pr;
+                live[ng_live++] = (uint8_t)i;
+            }
         rsc = 0.35f + 1.25f * p->rsize;
         t60 = 0.6f + fm_powf(p->rsize, 1.5f) * 14.0f;
         for (i = 0; i < 4; i++) {
@@ -461,6 +472,9 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             if (E.rv_d[i] < 100.0f) E.rv_d[i] = target;
             E.rv_g[i] = fm_exp2f(-9.965784f * E.rv_d[i] / (SR * t60));
         }
+        E.rv_mph += (float)cn * 0.6f / SR; if (E.rv_mph >= 1.0f) E.rv_mph -= 1.0f;
+        for (i = 0; i < 4; i++)         /* the lines' slow wander (no metallic ring), per chunk */
+            rv_dd[i] = E.rv_d[i] + (i & 1 ? 3.0f : -3.0f) * fm_sin_turns(E.rv_mph + 0.25f * (float)i) + 4.0f;
         send_d = p->delay * 0.8f;
         fb_d = 0.2f + 0.55f * p->delay;
         wet = p->rmix;
@@ -483,20 +497,17 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 L += gv * (0.7f - 0.4f * v->pan);
                 R += gv * (0.7f + 0.4f * v->pan);
             }
-            for (i = 0; i < G_NG; i++) {   /* the grains */
-                grain_t *g = &E.g[i];
-                voice_t *v;
-                float o, w;
+            for (j = 0; j < ng_live; j++) {   /* the grains */
+                grain_t *g = &E.g[live[j]];
+                float o;
                 if (!g->on) continue;
-                v = &E.v[g->v];
                 g->ph += g->inc;
-                if (g->ph >= 1.0f || !v->on) { g->on = 0; if (v->ng) v->ng--; continue; }
-                w = window(g->ph);
+                if (g->ph >= 1.0f) { voice_t *v = &E.v[g->v]; g->on = 0; if (v->ng) v->ng--; continue; }
                 g->frac += g->step;
                 while (g->frac >= 1.0f) { g->s0 = g->s1; g->s1 = (float)dec_next(&g->d); g->frac -= 1.0f; }
-                o = (g->s0 + (g->s1 - g->s0) * g->frac) * (1.0f / 32768.0f) * w * g->amp * v->genv * v->aenv * v->amp * grg;
-                L += o * g->pl;
-                R += o * g->pr;
+                o = (g->s0 + (g->s1 - g->s0) * g->frac) * window(g->ph);
+                L += o * g->gl;
+                R += o * g->gr;
             }
             if (lpan != 0.0f) { float l = L, r = R; L = l * (1.0f - lpan * 0.8f); R = r * (1.0f + lpan * 0.8f); }
             /* the tone */
@@ -528,10 +539,8 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             if (wet > 0.001f) {
                 float y[4], a, b, c, d, h[4], x = (L + R) * 0.18f, ol, orr;
                 int k;
-                E.rv_mph += 0.6f / SR; if (E.rv_mph >= 1.0f) E.rv_mph -= 1.0f;
                 for (k = 0; k < 4; k++) {
-                    float dd = E.rv_d[k] + (k & 1 ? 3.0f : -3.0f) * fm_sin_turns(E.rv_mph + 0.25f * (float)k) + 4.0f;
-                    y[k] = rd_line(rv_line[k], RV_MAXL, E.rv_w, dd);
+                    y[k] = rd_line(rv_line[k], RV_MAXL, E.rv_w, rv_dd[k]);
                     E.rv_lp[k] += 0.5f * (y[k] - E.rv_lp[k]);
                 }
                 a = E.rv_lp[0] + E.rv_lp[1]; b = E.rv_lp[0] - E.rv_lp[1];
