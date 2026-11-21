@@ -78,13 +78,13 @@ static const uint8_t PRESET_K[NPRESET][NK] = {
     /* AURORA: the cloud, an octave and a fifth above it, wide, a huge room */
     {78, 40, 80, 75, 60, 40, 25, 50, 85, 80, 90, 12, 35, LFO_POS, 5, 95, 60, 20, 0, 10, HALO_OCT5, 55, 85, TEX_OFF, 20, 40, 0},
     /* MIDNIGHT RAIN: a felt piano in the rain, the filter breathing */
-    {42, 50, 55, 70, 45, 30, 20, 20, 70, 75, 70, 10, 30, LFO_FILTER, 10, 70, 45, 15, 60, 15, HALO_OFF, 0, 60, TEX_RAIN, 50, 55, 30},
+    {42, 50, 55, 70, 45, 30, 20, 20, 70, 75, 70, 10, 30, LFO_FILTER, 10, 70, 45, 15, 60, 15, HALO_OFF, 0, 60, TEX_RAIN, 20, 55, 30},
     /* DREAMCORE: grains backwards, a major halo, a tape that leans */
-    {58, 40, 75, 65, 55, 45, 35, 35, 75, 70, 60, 20, 25, LFO_PITCH, 35, 75, 50, 30, 20, 60, HALO_MAJ, 35, 70, TEX_TAPE, 30, 40, 20},
+    {58, 40, 75, 65, 55, 45, 35, 35, 75, 70, 60, 20, 25, LFO_PITCH, 35, 75, 50, 30, 20, 60, HALO_MAJ, 35, 70, TEX_TAPE, 14, 40, 20},
     /* UNDERWATER: dark, slow waves, the filter rolling with the sea */
-    {35, 40, 70, 85, 55, 40, 25, 40, 80, 80, 80, 8, 70, LFO_FILTER, 15, 80, 55, 10, 40, 20, HALO_OCT, 20, 60, TEX_SEA, 45, 60, 10},
+    {35, 40, 70, 85, 55, 40, 25, 40, 80, 80, 80, 8, 70, LFO_FILTER, 15, 80, 55, 10, 40, 20, HALO_OCT, 20, 60, TEX_SEA, 11, 60, 10},
     /* STARDUST: lo-fi maj9 dust on vinyl */
-    {62, 50, 65, 45, 60, 50, 40, 15, 70, 70, 65, 25, 30, LFO_PAN, 10, 70, 50, 25, 30, 25, HALO_MAJ9, 45, 75, TEX_VINYL, 40, 45, 25},
+    {62, 50, 65, 45, 60, 50, 40, 15, 70, 70, 65, 25, 30, LFO_PAN, 10, 70, 50, 25, 30, 25, HALO_MAJ9, 45, 75, TEX_VINYL, 20, 45, 25},
 };
 
 #define SET_MAGIC 0x33505247u            /* "GRP3": the settings record; another magic loads defaults */
@@ -127,6 +127,11 @@ static void settings_load(void)
             knob_names((int)j, &nn);
             if (set.k[i][j] > (nn ? nn - 1u : 100u)) bad = 1;
         }
+    if (!bad) {                          /* the texture levels as first made (too loud): the new ones, unless changed */
+        static const uint8_t OLD[NPRESET] = {255, 255, 255, 255, 50, 30, 45, 40};
+        for (i = 0; i < NPRESET; i++)
+            if (set.k[i][K_TLEV] == OLD[i]) set.k[i][K_TLEV] = PRESET_K[i][K_TLEV];
+    }
     if (bad) settings_defaults();
     if (set.rsv2[0] >= 15u || set.rsv2[1] > 11u || set.rsv2[2] > 2u || set.rsv2[3] > 1u)   /* the scale page's (below) */
         set.rsv2[0] = set.rsv2[1] = set.rsv2[2] = set.rsv2[3] = 0;

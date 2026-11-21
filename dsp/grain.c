@@ -234,7 +234,7 @@ static struct {
     uint8_t rev_born;                   /* a backwards grain born this chunk (one a chunk: its decoding takes time) */
     float act;                          /* how much is being played, 0..1, smoothed (the texture's REACT) */
     /* the textures */
-    float tx_lp[4], tx_hp[2], tx_svl[2], tx_svb[2], tx_ph, tx_ph2, tx_walk, tx_gust, tx_env[2];
+    float tx_lp[4], tx_vl[2], tx_hp[2], tx_svl[2], tx_svb[2], tx_ph, tx_ph2, tx_walk, tx_gust, tx_env[2];
     float dr_y1[4], dr_y2[4], dr_a1[4], dr_a2[4], dr_pl[4], dr_pr[4];   /* rain drops: four resonators */
     uint8_t dr_next;
 } E;
@@ -495,18 +495,26 @@ static void texture(const gparams_t *p, float *l, float *r)
             ol += y * E.dr_pl[k] * 0.22f; orr += y * E.dr_pr[k] * 0.22f;
         }
         break;
-    case TEX_VINYL:
+    case TEX_VINYL: {
+        /* a real record is not bright: the crackle is soft pops (a little body, lowpassed), the dust a dull hiss, all
+         * through the stylus' roll-off (two poles, about 3.5 kHz) */
+        float hl, hr;
         E.tx_hp[0] += 0.02f * (nl - E.tx_hp[0]);
-        ol = orr = (nl - E.tx_hp[0]) * 0.03f;           /* dust */
-        if (rndu() < (8.0f + 260.0f * c * c) / SR) {    /* a crackle */
-            float a = rndu(); a = a * a * a * (rnd() < 0.0f ? -1.0f : 1.0f);
-            E.tx_env[0] = a; E.tx_env[1] = a * (0.4f + 0.6f * rndu());
+        hl = hr = (nl - E.tx_hp[0]) * 0.022f;           /* dust */
+        if (rndu() < (8.0f + 220.0f * c * c) / SR) {    /* a crackle: mostly small, now and then a pop */
+            float a = rndu(), sg = rnd() < 0.0f ? -1.0f : 1.0f;
+            a = a * a * a * sg * (rndu() < 0.08f ? 2.2f : 1.0f);
+            E.tx_env[0] = a; E.tx_env[1] = a * (0.5f + 0.5f * rndu());
         }
-        ol += E.tx_env[0] * 0.9f; orr += E.tx_env[1] * 0.9f;
-        E.tx_env[0] *= 0.55f; E.tx_env[1] *= 0.55f;
+        hl += E.tx_env[0]; hr += E.tx_env[1];
+        E.tx_env[0] *= 0.82f; E.tx_env[1] *= 0.82f;
+        E.tx_lp[2] += 0.38f * (hl - E.tx_lp[2]); E.tx_lp[3] += 0.38f * (hr - E.tx_lp[3]);   /* the roll-off */
+        E.tx_vl[0] += 0.38f * (E.tx_lp[2] - E.tx_vl[0]); E.tx_vl[1] += 0.38f * (E.tx_lp[3] - E.tx_vl[1]);
         E.tx_lp[0] += 0.0015f * (nl - E.tx_lp[0]);     /* the record's rumble */
-        ol += E.tx_lp[0] * 0.5f; orr += E.tx_lp[0] * 0.5f;
+        ol = E.tx_vl[0] * 1.6f + E.tx_lp[0] * 0.5f;
+        orr = E.tx_vl[1] * 1.6f + E.tx_lp[0] * 0.5f;
         break;
+    }
     case TEX_TAPE: {
         float br = 0.85f + 0.15f * fm_sin_turns(E.tx_ph2) + 0.1f * c * fm_sin_turns(E.tx_ph);
         E.tx_hp[0] += 0.05f * (nl - E.tx_hp[0]); E.tx_hp[1] += 0.05f * (nr - E.tx_hp[1]);
@@ -756,7 +764,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
         for (i = 0; i < 4; i++) E.rv_lp[i] = fm_flush(E.rv_lp[i]);
         for (i = 0; i < G_NV; i++) E.v[i].vlp = fm_flush(E.v[i].vlp);
         for (i = 0; i < 4; i++) { E.tx_lp[i] = fm_flush(E.tx_lp[i]); E.dr_y1[i] = fm_flush(E.dr_y1[i]); E.dr_y2[i] = fm_flush(E.dr_y2[i]); }
-        for (i = 0; i < 2; i++) { E.tx_svl[i] = fm_flush(E.tx_svl[i]); E.tx_svb[i] = fm_flush(E.tx_svb[i]); }
+        for (i = 0; i < 2; i++) { E.tx_vl[i] = fm_flush(E.tx_vl[i]); E.tx_svl[i] = fm_flush(E.tx_svl[i]); E.tx_svb[i] = fm_flush(E.tx_svb[i]); }
     }
     {                                   /* for the screen */
         uint8_t m = 0;
