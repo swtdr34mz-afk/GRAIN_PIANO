@@ -1,0 +1,68 @@
+# SPLIT (SEL twice, after the Take 5's low split): the keys left of the split play lower, in their own scale if asked
+wait 600
+tap SEL
+wait 30
+tap SEL
+wait 30
+expect page 12
+expect split 0
+tapkey 0
+wait 30
+expect lastcents 5300
+# -1 OCT at C4: F3 (key 0) plays F2, C4 (key 7) stays
+spin K1 1
+wait 30
+expect split 7
+tapkey 0
+wait 30
+expect lastcents 4100
+tapkey 6
+wait 30
+expect lastcents 4700
+tapkey 7
+wait 30
+expect lastcents 6000
+# -2 OCT
+spin K1 1
+wait 30
+tapkey 0
+wait 30
+expect lastcents 2900
+# the split moved: SEL held and a key pressed (E4, key 11)
+press SEL
+wait 30
+tapkey 11
+wait 30
+release SEL
+wait 30
+expect split 11
+tapkey 10
+wait 30
+expect lastcents 3900
+tapkey 11
+wait 30
+expect lastcents 6400
+# LEFT SCALE: MINOR on the left (SNAP: B falls to Bb), CHROMATIC on the right (still on SPLIT)
+expect page 12
+spin K3 1
+wait 20
+spin K3 1
+wait 20
+spin K3 1
+wait 20
+tapkey 6
+wait 30
+expect lastcents 3400
+tapkey 18
+wait 30
+expect lastcents 7100
+shot split.png
+# OFF: no split
+spin K1 -1
+spin K1 -1
+spin K1 -1
+wait 30
+expect split 0
+tapkey 0
+wait 30
+expect lastcents 5300

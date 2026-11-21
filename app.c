@@ -29,7 +29,7 @@
 /* ------------------------------------------------------------------ the knobs --- */
 enum { K_TONE, K_DYN, K_MIX, K_SIZE, K_DENS, K_POS, K_SPRAY, K_ATK, K_REL, K_PEDAL, K_FREEZE, K_LRATE, K_LDEPTH,
        K_LTARGET, K_WOBBLE, K_RSIZE, K_RMIX, K_DELAY, K_FELT, K_REV, K_HALO, K_HAMT, K_WIDTH, K_TEX, K_TLEV, K_TCHAR,
-       K_TREACT, K_PRESS, K_PAMT, K_MLEV, K_MSCAN, K_PULSE, K_BPM, K_SWING, K_PUMP, K_M1, K_M2, NK, K_PRESET = 100, K_SCALE, K_ROOT, K_KEYS, K_LIGHT, K_LEN, K_QUANT, K_CLICK, K_TEMPO };   /* (100..: not a preset's own) */
+       K_TREACT, K_PRESS, K_PAMT, K_MLEV, K_MSCAN, K_PULSE, K_BPM, K_SWING, K_PUMP, K_M1, K_M2, NK, K_PRESET = 100, K_SCALE, K_ROOT, K_KEYS, K_LIGHT, K_LEN, K_QUANT, K_CLICK, K_TEMPO, K_SOCT, K_SPOINT, K_SLSC };   /* (100..: not a preset's own) */
 static const char *const K_NAME[NK] = {"TONE", "DYNAMICS", "MIX", "SIZE", "DENSITY", "POSITION", "SPRAY", "ATTACK",
     "RELEASE", "PEDAL", "FREEZE", "RATE", "DEPTH", "TARGET", "WOBBLE", "ROOM", "REVERB", "DELAY", "FELT", "REVERSE",
     "HALO", "HALO MIX", "WIDTH", "TEXTURE", "LEVEL", "CHAR", "REACT", "PRESSURE", "AMOUNT", "MEMORY", "WANDER", "PULSE",
@@ -51,9 +51,10 @@ static const char *const *knob_names(int k, uint32_t *n)
     return 0;
 }
 
-enum { PG_MAIN, PG_SEL, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_MAGIC, PG_TEX, PG_SCALE, PG_MAGIC2, PG_PULSE, PG_LOOP, NPAGE };
+enum { PG_MAIN, PG_SEL, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_MAGIC, PG_TEX, PG_SCALE, PG_MAGIC2, PG_PULSE, PG_LOOP, PG_SPLIT,
+       NPAGE };
 static const char *const PAGE_NAME[NPAGE] = {"MAIN", "PIANO", "GRAINS", "ENVELOPE", "MOVEMENT", "ROOM", "MAGIC",
-                                             "TEXTURE", "SCALE", "MAGIC 2", "PULSE", "LOOP"};
+                                             "TEXTURE", "SCALE", "MAGIC 2", "PULSE", "LOOP", "SPLIT"};
 static const uint8_t PAGE_K[NPAGE][4] = {
     {K_POS, K_DENS, K_SIZE, K_MIX},
     {K_PRESET, K_TONE, K_DYN, K_MIX},
@@ -67,6 +68,7 @@ static const uint8_t PAGE_K[NPAGE][4] = {
     {K_PRESS, K_PAMT, K_MLEV, K_MSCAN},
     {K_PULSE, K_TEMPO, K_SWING, K_PUMP},
     {K_LEN, K_QUANT, K_CLICK, K_TEMPO},
+    {K_SOCT, K_SPOINT, K_SLSC, K_SCALE},
 };
 
 /* ------------------------------------------------------------------ the presets --- */
@@ -149,6 +151,9 @@ static void settings_load(void)
                                                                            4 bars, 1/16, a click while recording, 120 */
     }
     set.hold = 0;                        /* (HOLD is gone: PLAY runs the loop) */
+    if (set.rsv2[12] != 0xA5u || set.rsv2[9] > 3u || set.rsv2[10] > NKEYS - 2u || set.rsv2[11] > 15u)   /* (15 scales) */ {
+        set.rsv2[9] = 0; set.rsv2[10] = 6; set.rsv2[11] = 0; set.rsv2[12] = 0xA5u;   /* SPLIT: off, at C4, the same scale */
+    }
 }
 
 static uint8_t *kv(void) { return set.k[set.preset]; }
@@ -284,11 +289,19 @@ static float degree_pitch(float base, int32_t d)
 }
 
 /* what key k plays: 0 = nothing (a black key in WHITE); the pitch, and whether it is a root */
+/* SPLIT (SEL again, after the Take 5's low split): the keys left of the split point play OCTAVE lower, in their own
+ * scale if LEFT SCALE says one (SAME: the right's) */
+#define SPLIT_OCT (set.rsv2[9])
+#define SPLIT_KEY (set.rsv2[10] + 1u)       /* the first key of the right part (1 .. 26) */
+#define SPLIT_SC (set.rsv2[11])
+static int key_left(uint32_t k) { return SPLIT_OCT && k < SPLIT_KEY; }
+
 static int key_pitch(uint32_t k, float *pitch, int *root)
 {
     static const uint8_t WK[16] = PLAT_WHITE_KEYS;
-    const scale_t *sc = &SCALES[SC % NSCALE];
-    float base = 48.0f + (float)(ROOT % 12u) + 12.0f * (float)set.octave;   /* the root, in the octave of C3 */
+    const scale_t *sc = &SCALES[(key_left(k) && SPLIT_SC ? SPLIT_SC - 1u : SC) % NSCALE];
+    float base = 48.0f + (float)(ROOT % 12u) + 12.0f * (float)set.octave -   /* the root, in the octave of C3 */
+                 (key_left(k) ? 12.0f * (float)SPLIT_OCT : 0.0f);
     int32_t d = 0, i;
     if (KEYMODE == KEYS_ALL || KEYMODE == KEYS_WHITE) {
         if (KEYMODE == KEYS_ALL) d = (int32_t)k;
@@ -297,13 +310,15 @@ static int key_pitch(uint32_t k, float *pitch, int *root)
             if (i == 16) return 0;
             d = i;
         }
-        if (base < 53.0f - 6.0f) base += 12.0f;   /* (the first key near F3) */
+        if (base + (key_left(k) ? 12.0f * (float)SPLIT_OCT : 0.0f) < 53.0f - 6.0f) base += 12.0f;   /* (the first
+                                                                                         key near F3) */
         *pitch = degree_pitch(base, d);
         *root = (d % sc->n) == 0;
         return 1;
     }
     {                                    /* SNAP: the key's own pitch, to the nearest step at or below it */
-        float c = (53.0f + (float)k + 12.0f * (float)set.octave - (base - 12.0f)) * 100.0f, best = -1e9f, x;
+        float c = (53.0f + (float)k + 12.0f * (float)set.octave - (key_left(k) ? 12.0f * (float)SPLIT_OCT : 0.0f) -
+                   (base - 12.0f)) * 100.0f, best = -1e9f, x;
         int32_t per = (int32_t)(c / sc->period), bd = 0;
         for (i = -1; i <= 1; i++) {
             int32_t s2;
@@ -508,6 +523,8 @@ static struct {
     uint8_t page;
     uint8_t vel[NKEYS];
     uint32_t home_t, play_t, rec_t;      /* HOME / PLAY / REC went down (0: not held, or the hold already acted) */
+    uint32_t sel_t;                      /* SEL is held: a key pressed sets the split (as the Take 5's) */
+    uint8_t sel_used;                    /* a key was pressed while it was held (so no page change) */
     uint32_t turned_at[4];               /* when K1..K4 (as shown) were last turned: lit for a moment */
     uint32_t t_draw;
     uint8_t redraw, mem;                 /* mem: MEMORY asked on (REC) */
@@ -561,9 +578,12 @@ static const char *const QUANT_NAME[4] = {"OFF", "1/16", "1/8", "1/8T"};
 static const char *const CLICK_NAME[NCLICK] = {"OFF", "REC", "ON"};
 static uint8_t *gk(int which, uint32_t *n)
 {
-    static const uint8_t N[8] = {NSCALE, 12, NKEYMODE, 2, 5, 4, NCLICK, 101};
-    *n = N[(which - K_SCALE) & 7];
-    return &set.rsv2[(which - K_SCALE) & 7];
+    static const uint8_t N[11] = {NSCALE, 12, NKEYMODE, 2, 5, 4, NCLICK, 101, 4, NKEYS - 1, NSCALE + 1};
+    static const uint8_t AT[11] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11};   /* (rsv2[8] marks the loop's defaults) */
+    uint32_t i = (uint32_t)(which - K_SCALE);
+    if (i > 10u) i = 0;
+    *n = N[i];
+    return &set.rsv2[AT[i]];
 }
 static const char *gk_text(int which, int shrt)
 {
@@ -575,6 +595,16 @@ static const char *gk_text(int which, int shrt)
     if (which == K_LEN) return LEN_NAME[v];
     if (which == K_QUANT) return QUANT_NAME[v];
     if (which == K_CLICK) return CLICK_NAME[v];
+    if (which == K_SOCT) { static const char *const O[4] = {"OFF", "-1 OCT", "-2 OCT", "-3 OCT"}; return O[v & 3u]; }
+    if (which == K_SPOINT) {             /* the split: the first key of the right part */
+        static char kn[6];
+        static const char *const N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        uint32_t m = 54u + v;            /* (key 1 is F#3: the left part is at least a key) */
+        char o[4];
+        kn[0] = 0; text_cat(kn, N[m % 12u]); int_text((int32_t)(m / 12u) - 1, o); text_cat(kn, o);
+        return kn;
+    }
+    if (which == K_SLSC) return v == 0u ? "SAME" : shrt ? SCALES[v - 1u].shrt : SCALES[v - 1u].name;
     if (which == K_TEMPO) {              /* the tempo, or the outside clock's */
         if (ui.ext) return "EXT";
         int_text(70 + (int32_t)v, bpm);
@@ -607,8 +637,10 @@ static void value_text(int which, char *t)   /* a knob's value as shown */
 }
 static const char *knob_name(int which)
 {
-    static const char *const G[8] = {"SCALE", "ROOT", "KEYS", "LIGHT", "LENGTH", "QUANTIZE", "CLICK", "BPM"};
-    return which == K_PRESET ? "PRESET" : which > K_PRESET ? G[(which - K_SCALE) & 7] : K_NAME[which];
+    static const char *const G[11] = {"SCALE", "ROOT", "KEYS", "LIGHT", "LENGTH", "QUANTIZE", "CLICK", "BPM", "OCTAVE",
+                                      "SPLIT", "LEFT"};
+    if (which == K_SCALE && ui.page == PG_SPLIT) return "RIGHT";
+    return which == K_PRESET ? "PRESET" : which > K_PRESET ? G[(uint32_t)(which - K_SCALE) % 11u] : K_NAME[which];
 }
 
 static void preset_step(int32_t d)
@@ -713,7 +745,16 @@ static void input(void)
                 int v = touch_vel(k);
                 if (v <= 0) v = 100;
                 ui.vel[k] = (uint8_t)v;
-                key_press(k, v, cur);
+                if (btn >> B_SEL & 1u) {   /* SEL held: this key is the split (the right part's first) */
+                    if (k > 0u) {
+                        set.rsv2[10] = (uint8_t)(k - 1u);
+                        if (!SPLIT_OCT) SPLIT_OCT = 1;
+                        set_dirty = 1;
+                        app_say("SPLIT", gk_text(K_SPOINT, 0));
+                    }
+                    key_on[k] = 0;
+                    ui.sel_used = 1;
+                } else key_press(k, v, cur);
                 cur |= bit;
                 ui.redraw = 1;
             }
@@ -734,7 +775,7 @@ static void input(void)
         if (!(btn & bit) || (ui.btn & bit)) continue;
         switch (k) {
         case B_FX: page_go(PG_FX); break;
-        case B_SEL: page_go(PG_SEL); break;
+        case B_SEL: ui.sel_t = now ? now : 1u; ui.sel_used = 0; break;   /* (the page on release: see below) */
         case B_ENV: page_go(PG_ENV); break;
         case B_LFO: page_go(ui.page == PG_LFO ? PG_PULSE : PG_LFO); break;   /* again: PULSE */
         case B_EDIT: page_go(ui.page == PG_EDIT ? PG_TEX : PG_EDIT); break;   /* again: TEXTURE */
@@ -758,6 +799,10 @@ static void input(void)
             break;
         default: break;
         }
+    }
+    if (ui.sel_t && !(btn >> B_SEL & 1u)) {   /* SEL let go: PIANO, or again SPLIT (unless it set the split) */
+        ui.sel_t = 0;
+        if (!ui.sel_used) page_go(ui.page == PG_SEL ? PG_SPLIT : PG_SEL);
     }
     if (ui.home_t) {                     /* HOME held 1 s: the preset as it came */
         if (!(btn >> B_HOME & 1u)) ui.home_t = 0;
@@ -802,7 +847,7 @@ static void input(void)
      * held notes' keys dim */
     {
         static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX, B_GLO, B_EDIT, B_ARP, B_GLO, B_LFO,
-                                          B_SEQ};
+                                          B_SEQ, B_SEL};
         lit_btn = 1u << PB[ui.page];
         int pl, rc, bar;
         float w;
@@ -812,6 +857,8 @@ static void input(void)
         if (ui.mem || rc == 2 || (rc == 1 && (now / 250u) & 1u)) lit_btn |= 1u << B_REC;   /* (blinking: the count-in) */
     }
     lit_keys = keys;
+    if (SPLIT_OCT)                       /* SPLIT: the left part glows */
+        for (k = 0; k < NKEYS; k++) if (key_left(k)) dim_keys |= 1u << k;
     for (i = 0; i < hd.n; i++) {
         int32_t kk = held_key(i);
         if (kk >= 0) dim_keys |= 1u << kk;
@@ -992,7 +1039,7 @@ static void draw_keys(void)
     cv_begin(240, 56, C_BLACK);
     for (i = 0; i < 16u; i++) {
         uint32_t k = WK[i];
-        uint16_t c = (ui.keys >> k & 1u) ? COL_IVORY : (held >> k & 1u) ? COL_GOLD : COL_LINE;
+        uint16_t c = (ui.keys >> k & 1u) ? COL_IVORY : (held >> k & 1u) ? COL_GOLD : key_left(k) ? COL_DUSK : COL_LINE;
         cv_rect(4 + (int32_t)i * 14, 14, 13, 16, c);
     }
     for (i = 0; i < 11u; i++) {
@@ -1196,6 +1243,7 @@ int app_expect(const char *what, int *got)
     else if (!strncmp(what, "cents", 5) && what[5] >= '0' && what[5] <= '7')   /* cents0..7: a held note's pitch x 100 */
         *got = what[5] - '0' < hd.n ? (int)(hd.pitch[what[5] - '0'] * 100.0f + 0.5f) : -1;
     else if (!strcmp(what, "scale")) *got = SC;
+    else if (!strcmp(what, "split")) *got = SPLIT_OCT ? (int)SPLIT_KEY : 0;
     else if (!strncmp(what, "ev", 2) && what[2] >= '0' && what[2] <= '9') {   /* evN: event N's place x 1000 */
         float w;
         int kd;

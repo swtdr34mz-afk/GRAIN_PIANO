@@ -64,6 +64,17 @@ louder. The dotted lines show where each note is read. The gold square marks POS
 | DYNAMICS | how much velocity changes loudness and brightness |
 | MIX | only piano ↔ only grains |
 
+### SEL again – SPLIT (for every preset)
+After the Sequential Take 5's low split: the keys left of the split point play lower: a bass with the left hand,
+chords or a melody with the right. The left part glows, on the keys and on the screen.
+
+| Knob | What it does |
+| --- | --- |
+| OCTAVE | how much lower on the left: OFF (no split), −1, −2, −3 octaves |
+| SPLIT | the split point: the right part's first key (C4 at first). Or **hold SEL and press a key**: it becomes the split |
+| LEFT | the left's scale: SAME (as the right) or its own |
+| RIGHT | the right's scale, the same as ARP – SCALE |
+
 ### EDIT – GRAINS
 | Knob | What it does |
 | --- | --- |

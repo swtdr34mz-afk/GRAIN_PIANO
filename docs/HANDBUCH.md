@@ -68,6 +68,17 @@ unten zeigt POSITION. Oben links stehen die zwei Makros (SELECT, ALGORITHM).
 | DYNAMICS | wie stark der Anschlag Lautstärke und Helligkeit ändert |
 | MIX | nur Klavier ↔ nur Grains |
 
+### SEL nochmal – SPLIT (gilt für alle Presets)
+Wie der Low Split des Sequential Take 5: Die Tasten links vom Splitpunkt spielen tiefer, zum Beispiel Bass mit der
+linken Hand, Akkorde oder Melodie mit der rechten. Der linke Bereich glimmt auf den Tasten und im Display.
+
+| Regler | Funktion |
+| --- | --- |
+| OCTAVE | wie viel tiefer links: OFF (kein Split), −1, −2, −3 Oktaven |
+| SPLIT | der Splitpunkt: die erste Taste des rechten Bereichs (Standard C4). Oder **SEL halten und eine Taste drücken**: Sie wird der Splitpunkt. |
+| LEFT | die Skala links: SAME (wie rechts) oder eine eigene |
+| RIGHT | die Skala rechts, dieselbe wie auf ARP – SCALE |
+
 ### EDIT – GRAINS
 | Regler | Funktion |
 | --- | --- |

@@ -30,6 +30,7 @@ note's pitch, taken from a point that moves through the sound (from the hammer t
 | LFO | MOVEMENT: RATE, DEPTH, TARGET (position, pitch, filter, pan), WOBBLE (tape) |
 | FX | ROOM: ROOM (size), REVERB, DELAY, FELT (damped, warm) |
 | GLO | MAGIC: REVERSE (grains played backwards), HALO (octave, fifth, oct+5th, major, minor, sus, maj9), HALO MIX, WIDTH |
+| SEL again | SPLIT (after the Take 5's low split): the keys left of the split point an OCTAVE (−1..−3) lower, the SPLIT point (or hold SEL and press a key), the LEFT and RIGHT scales; the left part glows |
 | EDIT again | TEXTURE: TEXTURE (rain, vinyl, tape, wind, sea, room: made in the FM-1, no recordings), LEVEL, CHAR (light .. heavy), REACT (it follows your playing) |
 | GLO again | MAGIC 2: PRESSURE (what pressing a key harder does: DENSITY, POSITION, VIBRATO, SWELL), AMOUNT, MEMORY (its cloud's level), WANDER (how fast that cloud moves through the phrase) |
 | REC | on the LOOP page: record (a bar counted in; again: stop recording; held 1 s: clear). Elsewhere MEMORY: the last 2 seconds played, frozen into a cloud of their own; REC again, it fades |

@@ -42,6 +42,7 @@ jobs:
           build/host/grainpiano_host tests/seq.txt build/host
           build/host/grainpiano_host tests/seq2.txt build/host
           build/host/grainpiano_host tests/seq3.txt build/host
+          build/host/grainpiano_host tests/split.txt build/host
 
       - name: JieLi toolchain
         run: fm1-base/tools/get_toolchain.sh "$HOME/.jieli"
