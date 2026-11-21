@@ -1,7 +1,5 @@
-# the LOOP (SEQ three times): REC counts a bar in, records notes and knob moves; PLAY plays them back
+# the LOOP (SEQ twice): REC counts a bar in, records notes and knob moves; PLAY plays them back
 wait 600
-tap SEQ
-wait 30
 tap SEQ
 wait 30
 tap SEQ

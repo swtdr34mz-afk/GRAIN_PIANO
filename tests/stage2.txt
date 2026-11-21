@@ -27,10 +27,10 @@ shot memory.png
 tap REC
 wait 4000
 expect memory 0
-# PULSE: SEQ twice, 1/8 at 120 BPM, a held chord in bursts
-tap SEQ
+# PULSE: LFO twice, 1/8 at 120 BPM, a held chord in bursts
+tap LFO
 wait 30
-tap SEQ
+tap LFO
 wait 30
 expect page 10
 spin K1 1

@@ -14,7 +14,7 @@ floating clouds, glittering pads, and notes between the piano's keys.
 1. Play a few notes. You hear the piano and, over it, its cloud of grains.
 2. Turn **SELECT** and **ALGORITHM**: the preset's two macros, that bring it to life.
 3. Turn **PRESET**: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST.
-4. Press **SEQ** three times (the LOOP page), then **REC**: after a bar's count-in you record a loop, your knob moves
+4. Press **SEQ** twice (the LOOP page), then **REC**: after a bar's count-in you record a loop, your knob moves
    too. **PLAY** starts and stops it.
 5. Turn **K1–K4**. The lit button shows the page you are on.
 6. Press **SAVE** to keep your settings (it is lit when something changed).
@@ -88,6 +88,14 @@ louder. The dotted lines show where each note is read. The gold square marks POS
 | TARGET | what moves: POSITION, PITCH, FILTER, PAN |
 | WOBBLE | the gentle wow of an old tape |
 
+### LFO again – PULSE
+| Knob | What it does |
+| --- | --- |
+| PULSE | grains in bursts on the beat: OFF, 1/4, 1/8, 1/8T, 1/16, 1/32 |
+| BPM | 70–170; an incoming MIDI clock (Ableton …) wins: it shows EXT |
+| SWING | every second burst later |
+| PUMP | the sound ducks on each beat (sidechain) |
+
 ### FX – ROOM
 | Knob | What it does |
 | --- | --- |
@@ -128,14 +136,6 @@ louder. The dotted lines show where each note is read. The gold square marks POS
 | KEYS | SNAP: each key to the scale's step at or below it · WHITE: the white keys in a row, the black ones silent · ALL: every key the next step |
 | LIGHT | the roots' keys lit |
 
-### SEQ again – PULSE
-| Knob | What it does |
-| --- | --- |
-| PULSE | grains in bursts on the beat: OFF, 1/4, 1/8, 1/8T, 1/16, 1/32 |
-| BPM | 70–170; an incoming MIDI clock (Ableton …) wins: it shows EXT |
-| SWING | every second burst later |
-| PUMP | the sound ducks on each beat (sidechain) |
-
 ## 5. The macros: SELECT and ALGORITHM
 
 **SELECT** and **ALGORITHM** are each preset's two **macros**: each moves 6 or 7 knobs at once. At 0 the preset is as
@@ -156,7 +156,7 @@ The macros are kept per preset (SAVE). The pages show the knobs as you set them,
 
 ## 6. LOOP, the sequencer
 
-Press **SEQ** three times (SCALE → PULSE → **LOOP**). The loop records **notes and knob moves**, not sound: it all plays
+Press **SEQ** twice (SCALE → **LOOP**). The loop records **notes and knob moves**, not sound: it all plays
 live through GRAIN PIANO, so after recording you can change the preset, the macros, the scale, the room, anything, and
 the loop sounds new at once.
 

@@ -736,11 +736,11 @@ static void input(void)
         case B_FX: page_go(PG_FX); break;
         case B_SEL: page_go(PG_SEL); break;
         case B_ENV: page_go(PG_ENV); break;
-        case B_LFO: page_go(PG_LFO); break;
+        case B_LFO: page_go(ui.page == PG_LFO ? PG_PULSE : PG_LFO); break;   /* again: PULSE */
         case B_EDIT: page_go(PG_EDIT); break;
         case B_GLO: page_go(ui.page == PG_MAGIC ? PG_MAGIC2 : PG_MAGIC); break;   /* again: the second page */
         case B_ARP: page_go(PG_TEX); break;
-        case B_SEQ: page_go(ui.page == PG_SCALE ? PG_PULSE : ui.page == PG_PULSE ? PG_LOOP : PG_SCALE); break;
+        case B_SEQ: page_go(ui.page == PG_SCALE ? PG_LOOP : PG_SCALE); break;   /* again: LOOP */
         case B_REC:                      /* on LOOP: record (decided on release: held 1 s, the loop is cleared);
                                           * elsewhere MEMORY: the last seconds played, frozen into a cloud */
             if (ui.page == PG_LOOP) { ui.rec_t = now ? now : 1u; break; }
@@ -801,7 +801,7 @@ static void input(void)
     /* the lights: the page's button, PLAY while HOLD is on, SAVE when something changed; the keys down bright, the
      * held notes' keys dim */
     {
-        static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX, B_GLO, B_ARP, B_SEQ, B_GLO, B_SEQ,
+        static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX, B_GLO, B_ARP, B_SEQ, B_GLO, B_LFO,
                                           B_SEQ};
         lit_btn = 1u << PB[ui.page];
         int pl, rc, bar;

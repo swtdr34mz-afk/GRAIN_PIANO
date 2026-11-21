@@ -16,7 +16,7 @@ Klaviertasten.
 2. Dreh an **SELECT** und **ALGORITHM**: die zwei Makros des Presets, die es richtig aufleben lassen.
 3. Dreh am **PRESET**-Regler: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER,
    STARDUST.
-4. Drück **SEQ** dreimal (Seite LOOP) und dann **REC**: Nach einem Takt Einzähler nimmst du einen Loop auf, auch deine
+4. Drück **SEQ** zweimal (Seite LOOP) und dann **REC**: Nach einem Takt Einzähler nimmst du einen Loop auf, auch deine
    Reglerbewegungen. **PLAY** startet und stoppt ihn.
 5. Dreh an **K1–K4**. Welche Seite gerade aktiv ist, zeigt der leuchtende Knopf.
 6. Drück **SAVE**, um deine Einstellungen zu behalten. SAVE leuchtet, wenn sich etwas geändert hat.
@@ -92,6 +92,14 @@ unten zeigt POSITION. Oben links stehen die zwei Makros (SELECT, ALGORITHM).
 | TARGET | was sich bewegt: POSITION, PITCH (Tonhöhe), FILTER, PAN (links/rechts) |
 | WOBBLE | leichtes Leiern wie bei einem alten Tonband |
 
+### LFO nochmal – PULSE
+| Regler | Funktion |
+| --- | --- |
+| PULSE | Die Grains kommen in Schüben im Takt: OFF, 1/4, 1/8, 1/8T, 1/16, 1/32 |
+| BPM | Tempo 70–170. Kommt eine MIDI-Clock an (z. B. von Ableton), folgt GRAIN PIANO ihr automatisch, dann steht dort „EXT“. |
+| SWING | verschiebt jeden zweiten Schub |
+| PUMP | Der Klang duckt sich auf jeden Schlag (Sidechain-Effekt). |
+
 ### FX – ROOM
 | Regler | Funktion |
 | --- | --- |
@@ -132,14 +140,6 @@ unten zeigt POSITION. Oben links stehen die zwei Makros (SELECT, ALGORITHM).
 | KEYS | SNAP: jede Taste rutscht auf den nächsten Skalenton darunter · WHITE: nur die weißen Tasten spielen die Skala, die schwarzen sind still · ALL: jede Taste ist der nächste Skalenton |
 | LIGHT | Die Grundton-Tasten leuchten heller. |
 
-### SEQ nochmal – PULSE
-| Regler | Funktion |
-| --- | --- |
-| PULSE | Die Grains kommen in Schüben im Takt: OFF, 1/4, 1/8, 1/8T, 1/16, 1/32 |
-| BPM | Tempo 70–170. Kommt eine MIDI-Clock an (z. B. von Ableton), folgt GRAIN PIANO ihr automatisch, dann steht dort „EXT“. |
-| SWING | verschiebt jeden zweiten Schub |
-| PUMP | Der Klang duckt sich auf jeden Schlag (Sidechain-Effekt). |
-
 ## 5. Die Makros: SELECT und ALGORITHM
 
 **SELECT** und **ALGORITHM** sind pro Preset zwei **Makro-Regler**. Jeder dreht 6 bis 7 Parameter gleichzeitig.
@@ -162,7 +162,7 @@ ohne den Anteil der Makros.
 
 ## 6. LOOP – der Sequencer
 
-Drück **SEQ** dreimal (SCALE → PULSE → **LOOP**). Der Loop nimmt **Noten und Reglerbewegungen** auf, keinen Ton.
+Drück **SEQ** zweimal (SCALE → **LOOP**). Der Loop nimmt **Noten und Reglerbewegungen** auf, keinen Ton.
 Alles spielt live durch GRAIN PIANO. Nach der Aufnahme kannst du also Preset, Makros, Skala, Hall und alles andere
 ändern, und der Loop klingt sofort anders.
 
