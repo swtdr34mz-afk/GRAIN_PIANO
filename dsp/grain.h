@@ -55,9 +55,10 @@ void g_seq_cfg(int bars, int quant_ticks, int click);   /* its length, the grid 
 void g_seq_knob(int k, int v);          /* a knob moved: kept in the loop while it records */
 int g_seq_knob_out(int *k, int *v);     /* a knob move the loop plays back: 1 = one (the app sets it) */
 /* where it is: playing, recording (1 the count-in, 2 recording), the place 0..1, the bar (0 ..), the events (for the
- * screen: each one's place 0..1 and kind, 0 a note, 1 a knob) */
+ * screen: each one's place 0..1, its kind (0 a note's start, 1 its end, 2 a knob move) and pitch) */
 int g_seq_state(int *play, int *rec, float *where, int *bar);
-int g_seq_event(int i, float *where, int *kind);
+int g_seq_event(int i, float *where, int *kind, float *pitch);
+uint32_t g_seq_fired(void);             /* notes the loop has played back since the start (the host's checks) */
 void g_all_off(void);                   /* every note released (they fade) */
 void g_panic(void);                     /* silence now */
 void g_render(int32_t *lr, uint32_t n, float gain);

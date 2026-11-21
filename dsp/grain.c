@@ -375,10 +375,12 @@ static void note_off(int id)
 #define SEQ_MAXEV 1536u
 #define SEQ_KQ 64u
 enum { EV_ON, EV_OFF, EV_KNOB };
-typedef struct { uint32_t t; uint16_t id; uint8_t type, k, v, fresh, pad[2]; float pitch; } sev_t;
+typedef struct { uint32_t t; uint16_t id; uint8_t type, k, v, pad; int16_t skip; float pitch; } sev_t;   /* skip: the pass it is
+                                         * not played in (it was heard live; -1 none) */
 static sev_t sev[SEQ_MAXEV];
 static struct {
-    uint32_t n, len, quant;
+    uint32_t n, len, quant, fired;
+    int16_t npass;                      /* the passes round the loop (for skip) */
     float pos, count, abs;
     uint8_t play, rec, click;
     uint32_t touched[2];                /* knobs moved in this recording (their old moves gone) */
@@ -388,13 +390,20 @@ static struct {
     volatile uint32_t kq_h, kq_t;
 } S = {.len = 4u * 4u * SEQ_PPQ, .click = CLICK_REC};
 
+/* an event at t (ticks from the loop's start, may be past its end). Heard live as it was played: it is not played
+ * again until the loop comes round, so when t is still ahead in this pass (a note moved forward to the grid), or at
+ * the next pass's start, that pass skips it */
 static void seq_add(uint32_t t, int type, int id, float pitch, int v, int k)
 {
     sev_t *e;
+    uint32_t now = (uint32_t)S.pos;
     if (S.n >= SEQ_MAXEV) return;       /* (full: no more) */
     e = &sev[S.n++];
-    e->t = t % S.len; e->type = (uint8_t)type; e->id = (uint16_t)id; e->pitch = pitch; e->v = (uint8_t)v;
-    e->k = (uint8_t)k; e->fresh = 1;
+    e->type = (uint8_t)type; e->id = (uint16_t)id; e->pitch = pitch; e->v = (uint8_t)v; e->k = (uint8_t)k;
+    e->skip = -1;
+    if (t >= S.len) { t -= S.len; e->skip = (int16_t)(S.npass + 1); }   /* (into the next pass) */
+    else if (t > now) e->skip = S.npass;   /* (later in this one) */
+    e->t = t;
 }
 static uint32_t seq_now(void) { return (uint32_t)S.pos % S.len; }
 
@@ -404,7 +413,7 @@ static void seq_rec_on(int id, float pitch, float vel)
     int i, slot = -1;
     if (S.rec != 2 || (id & 0x8000)) return;
     t = seq_now(); tq = t;
-    if (S.quant) tq = ((t + S.quant / 2u) / S.quant) * S.quant;
+    if (S.quant) tq = ((t + S.quant / 2u) / S.quant) * S.quant;   /* (may be the loop's end: the next start) */
     for (i = 0; i < 16; i++) if (!S.open[i].on) { slot = i; break; }
     if (slot >= 0) { S.open[slot].on = 1; S.open[slot].id = (uint16_t)id; S.open[slot].off = (int32_t)tq - (int32_t)t; }
     seq_add(tq, EV_ON, id, pitch, (int)(vel * 127.0f + 0.5f), 0);
@@ -455,7 +464,7 @@ static void seq_release_all(void)       /* the loop's notes let go */
 static void seq_op(int op)
 {
     switch (op) {
-    case SEQ_PLAY: S.play = 1; S.rec = 0; S.pos = 0.0f; S.abs = 0.0f; break;
+    case SEQ_PLAY: S.play = 1; S.rec = 0; S.pos = 0.0f; S.abs = 0.0f; S.npass++; break;
     case SEQ_STOP:
         if (S.rec == 2) seq_close();
         S.play = 0; S.rec = 0;
@@ -485,8 +494,9 @@ static void seq_fire(float a, float b)  /* the events in [a, b) */
         sev_t *e = &sev[i];
         float t = (float)e->t;
         if (t < a || t >= b || e->t >= S.len) continue;
-        if (e->fresh) { e->fresh = 0; continue; }   /* (recorded in this pass: it was heard as played) */
-        if (e->type == EV_ON) note_on(e->id | 0x8000, e->pitch, (float)e->v * (1.0f / 127.0f));
+        if (e->skip == S.npass) { e->skip = -1; continue; }   /* (it was heard live, as played) */
+        e->skip = -1;
+        if (e->type == EV_ON) { note_on(e->id | 0x8000, e->pitch, (float)e->v * (1.0f / 127.0f)); S.fired++; }
         else if (e->type == EV_OFF) note_off(e->id | 0x8000);
         else {
             uint32_t h = S.kq_h, nh = (h + 1u) % SEQ_KQ;
@@ -522,12 +532,12 @@ static void seq_chunk(uint32_t cn, float bpm)
     }
     if (S.rec == 1) {                   /* the count-in: the loop waits */
         S.count -= adv;
-        if (S.count <= 0.0f) { S.rec = 2; S.pos = 0.0f; seq_fire(0.0f, 1.0f); }
+        if (S.count <= 0.0f) { S.rec = 2; S.pos = 0.0f; S.npass++; seq_fire(0.0f, 1.0f); }
         return;
     }
     {
         float p0 = S.pos, p1 = p0 + adv, len = (float)S.len;
-        if (p1 >= len) { seq_fire(p0, len); p1 -= len; seq_fire(0.0f, p1); }
+        if (p1 >= len) { seq_fire(p0, len); p1 -= len; S.npass++; seq_fire(0.0f, p1); }
         else seq_fire(p0, p1);
         S.pos = p1;
     }
@@ -548,13 +558,15 @@ int g_seq_state(int *play, int *rec, float *where, int *bar)
     *bar = (int)(S.pos / (4.0f * SEQ_PPQ));
     return (int)(S.len / (4u * SEQ_PPQ));
 }
-int g_seq_event(int i, float *where, int *kind)
+int g_seq_event(int i, float *where, int *kind, float *pitch)
 {
     if (i < 0 || (uint32_t)i >= S.n) return 0;
     *where = (float)sev[i].t / (float)S.len;
-    *kind = sev[i].type == EV_KNOB;
+    *kind = sev[i].type == EV_KNOB ? 2 : sev[i].type == EV_OFF ? 1 : 0;
+    *pitch = sev[i].pitch;
     return 1;
 }
+uint32_t g_seq_fired(void) { return S.fired; }
 
 static void run_commands(void)
 {

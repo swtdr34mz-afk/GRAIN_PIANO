@@ -1,0 +1,54 @@
+# the loop plays back every note it recorded, from the first pass after recording: QUANTIZE OFF, then 1/16
+wait 600
+tap SEQ
+wait 30
+tap SEQ
+wait 30
+expect page 11
+# 2 bars (4 s at 120), QUANTIZE OFF
+spin K1 -1
+wait 20
+spin K2 -1
+wait 20
+tap REC
+wait 2100
+expect seq_rec 2
+# one note a bar, as in CONCERT GRAND
+wait 500
+key w4 down 90
+wait 300
+key w4 up
+wait 1700
+key w7 down 90
+wait 300
+key w7 up
+wait 1600
+expect seq_notes 2
+tap REC
+wait 50
+expect seq_rec 0
+# (the loop had come round: the first note already played back once)
+expect seq_fired 1
+# every pass after: both notes
+wait 4000
+expect seq_fired 3
+wait 4000
+expect seq_fired 5
+# 1/16: the same, and a third note on the grid
+spin K2 1
+wait 20
+tap REC
+wait 50
+expect seq_rec 2
+key w9 down 90
+wait 200
+key w9 up
+wait 300
+tap REC
+wait 50
+expect seq_notes 3
+wait 4000
+expect seq_fired >6
+tap PLAY
+wait 50
+expect seq_play 0

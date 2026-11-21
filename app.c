@@ -920,7 +920,7 @@ static void draw_loop(int32_t y0, int32_t h, uint32_t now)
 {
     int pl, rc, bar, bars = g_seq_state(&pl, &rc, &w_loop, &bar), i, kind;
     int32_t x0 = 10, w = 220, b;
-    float wh;
+    float wh, pt;
     (void)now;
     cv_text(10, y0 + 2, &FONT_T, "REC", COL_LABEL);
     cv_text(34, y0 + 2, &FONT_T, rc == 2 ? "RECORDING" : rc == 1 ? "COUNT-IN" : "RECORDS (HELD 1 S: CLEARS)",
@@ -932,10 +932,13 @@ static void draw_loop(int32_t y0, int32_t h, uint32_t now)
         cv_rect(x, y0 + 32, 1, h - 36, b % 4 == 0 ? COL_LABEL : COL_LINE);
     }
     cv_rect(x0, y0 + h - 4, w, 1, COL_LINE);
-    for (i = 0; g_seq_event(i, &wh, &kind); i++) {
+    for (i = 0; g_seq_event(i, &wh, &kind, &pt); i++) {   /* a note: a dot at its start, high as its pitch */
         int32_t x = x0 + (int32_t)(wh * (float)w);
-        if (kind) cv_rect(x, y0 + h - 12, 1, 4, COL_DUSK);
-        else cv_rect(x - 1, y0 + 38 + (i * 7) % (h - 56), 3, 3, COL_GOLD);
+        if (kind == 2) cv_rect(x, y0 + h - 12, 1, 4, COL_DUSK);
+        else if (kind == 0) {
+            int32_t y = y0 + 34 + (int32_t)((float)(h - 50) * (1.0f - fm_clampf((pt - 36.0f) / 60.0f, 0.0f, 1.0f)));
+            cv_rect(x - 1, y, 3, 3, COL_GOLD);
+        }
     }
     if (pl && rc != 1) {                 /* where it is */
         int32_t x = x0 + (int32_t)(w_loop * (float)w);
@@ -1195,16 +1198,18 @@ int app_expect(const char *what, int *got)
     else if (!strncmp(what, "ev", 2) && what[2] >= '0' && what[2] <= '9') {   /* evN: event N's place x 1000 */
         float w;
         int kd;
-        *got = g_seq_event(atoi(what + 2), &w, &kd) ? (int)(w * 1000.0f + 0.5f) : -1;
+        float pt;
+        *got = g_seq_event(atoi(what + 2), &w, &kd, &pt) ? (int)(w * 1000.0f + 0.5f) : -1;
     } else if (!strcmp(what, "lastcents")) *got = (int)(last_pitch * 100.0f + 0.5f);
     else if (!strcmp(what, "intro")) *got = ui.intro;
-    else if (!strcmp(what, "seq_play") || !strcmp(what, "seq_rec") || !strcmp(what, "seq_events")) {
-        int pl, rc, bar, kd;
-        float w;
+    else if (!strcmp(what, "seq_fired")) *got = (int)g_seq_fired();
+    else if (!strcmp(what, "seq_play") || !strcmp(what, "seq_rec") || !strcmp(what, "seq_events") ||
+             !strcmp(what, "seq_notes")) {
+        int pl, rc, bar, kd, n = 0, m = 0;
+        float w, pt;
         g_seq_state(&pl, &rc, &w, &bar);
-        if (what[4] == 'p') *got = pl;
-        else if (what[4] == 'r') *got = rc;
-        else { int n = 0; while (g_seq_event(n, &w, &kd)) n++; *got = n; }
+        while (g_seq_event(n, &w, &kd, &pt)) { if (kd == 0) m++; n++; }
+        *got = what[4] == 'p' ? pl : what[4] == 'r' ? rc : what[4] == 'e' ? n : m;
     }
     else if (!strcmp(what, "memory")) *got = g_memory_on();
     else if (!strcmp(what, "ext")) *got = ui.ext;
