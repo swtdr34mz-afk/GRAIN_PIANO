@@ -22,7 +22,7 @@ note's pitch, taken from a point that moves through the sound (from the hammer t
 | Control | What it does |
 | --- | --- |
 | Keys | The piano, with velocity. OCT- / OCT+: the octave |
-| **PLAY** | **HOLD** on / off (PLAY lit). Held 0.8 s: every held note lets go |
+| **PLAY** | the LOOP from the top / stopped (lit while it plays); MIDI start, stop and clock out |
 | HOME | The main page (the cloud). Held 1 s: the preset back as it came |
 | SEL | PIANO: PRESET, TONE, DYNAMICS, MIX (piano .. grains) |
 | EDIT | GRAINS: SIZE, DENSITY, POSITION (hammer .. tail), SPRAY (scatter, then octaves and fifths) |
@@ -32,8 +32,9 @@ note's pitch, taken from a point that moves through the sound (from the hammer t
 | GLO | MAGIC: REVERSE (grains played backwards), HALO (octave, fifth, oct+5th, major, minor, sus, maj9), HALO MIX, WIDTH |
 | ARP | TEXTURE: TEXTURE (rain, vinyl, tape, wind, sea, room: made in the FM-1, no recordings), LEVEL, CHAR (light .. heavy), REACT (it follows your playing) |
 | GLO again | MAGIC 2: PRESSURE (what pressing a key harder does: DENSITY, POSITION, VIBRATO, SWELL), AMOUNT, MEMORY (its cloud's level), WANDER (how fast that cloud moves through the phrase) |
-| REC | MEMORY: the last 2 seconds played, frozen into a cloud of their own that goes on while you play over it; REC again, it fades |
+| REC | on the LOOP page: record (a bar counted in; again: stop recording; held 1 s: clear). Elsewhere MEMORY: the last 2 seconds played, frozen into a cloud of their own; REC again, it fades |
 | SEQ again | PULSE: the grains in bursts on the beat (OFF, 1/4, 1/8, 1/8T, 1/16, 1/32), BPM (70..170; an outside MIDI clock wins: EXT), SWING, PUMP (the sound ducking on each beat) |
+| SEQ a third time | LOOP: a sequencer of 1 to 16 bars recording notes and knob moves (K1..K4, the macros), played back live: LENGTH, QUANTIZE, CLICK, BPM |
 | SEQ | SCALE (for every preset): SCALE, ROOT, KEYS (SNAP: each key to the scale's step at or below it; WHITE: the white keys in a row, the black ones silent; ALL: every key the next step), LIGHT (the roots' keys lit) |
 | K1..K4 | The page's four knobs |
 | PRESET | The preset: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST. Each keeps your changes |
@@ -47,17 +48,6 @@ CHROMATIC, MAJOR, MINOR; PHONK (phrygian), TRAP (harmonic minor), DRILL (hungari
 harmonic series 8..15), PELOG (the gamelan's tuning), FLOAT MAJ9 and FLOAT MIN11 (only a chord's notes), ALIEN
 (Bohlen-Pierce: it repeats at an octave and a fifth, not the octave). The samples are retuned freely, so every step
 sounds where it should; MIDI out sends the nearest key.
-
-### The smart HOLD
-
-With HOLD on, what you play stays, so both hands are free for the knobs:
-
-- keys pressed together, or while one is still down, are one chord: they add up
-- a new key with no key down starts a new chord: the old one fades out (with RELEASE)
-- a held note tapped again alone lets go of that note only
-- a held note pressed and kept down (0.4 s) starts a new chord from it
-- at most eight notes: the oldest goes
-- held notes stay through presets, pages and octave changes; HOLD off lets them go
 
 ## Building
 

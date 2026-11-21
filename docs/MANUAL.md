@@ -14,7 +14,8 @@ floating clouds, glittering pads, and notes between the piano's keys.
 1. Play a few notes. You hear the piano and, over it, its cloud of grains.
 2. Turn **SELECT** and **ALGORITHM**: the preset's two macros, that bring it to life.
 3. Turn **PRESET**: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST.
-4. Press **PLAY** (HOLD on) and play a chord: it keeps sounding, both hands free for the knobs.
+4. Press **SEQ** three times (the LOOP page), then **REC**: after a bar's count-in you record a loop, your knob moves
+   too. **PLAY** starts and stops it.
 5. Turn **K1–K4**. The lit button shows the page you are on.
 6. Press **SAVE** to keep your settings (it is lit when something changed).
 
@@ -39,12 +40,12 @@ becomes a cloud that never ends.
 | ALGORITHM knob | the preset's macro 2 (chapter 5) |
 | K1–K4 | the page's four knobs |
 | HOME | the main page (the cloud). **Held 1 s:** the preset back as it came |
-| PLAY | **HOLD** on / off (lit green). **Held 0.8 s:** every held note lets go |
-| REC | **MEMORY**: freeze / fade |
+| PLAY | the loop from the top / stopped (lit green while it plays); MIDI start / stop out |
+| REC | on the **LOOP** page: record (chapter 6); on every other page: **MEMORY** freeze / fade |
 | SAVE | keep the settings |
 | MASTER | volume |
 
-The bottom line shows HOLD and how many notes are held, **CPU** (the chip's load; orange from about 85 %), the octave,
+The bottom line shows the loop (STOP, PLAY and its bar, COUNT, REC), **CPU** (the chip's load; orange from about 85 %), the octave,
 and SAVE when there is something to save.
 
 ## 4. The pages
@@ -153,19 +154,35 @@ saved; turned up, it comes to life. Their names, and how far they are turned, ar
 
 The macros are kept per preset (SAVE). The pages show the knobs as you set them, before the macros.
 
-## 6. HOLD, the smart part
+## 6. LOOP, the sequencer
 
-**PLAY** turns HOLD on (lit). Then what you play stays:
+Press **SEQ** three times (SCALE → PULSE → **LOOP**). The loop records **notes and knob moves**, not sound: it all plays
+live through GRAIN PIANO, so after recording you can change the preset, the macros, the scale, the room, anything, and
+the loop sounds new at once.
 
-- keys pressed **together** (or while one is still down) are **one chord**
-- a **new key** with no key down starts a **new chord**; the old one fades with RELEASE
-- a held note **tapped alone** lets go of that note only
-- a held note **pressed and kept down 0.4 s** starts a new chord from it
-- **eight notes** at most: the oldest goes
-- held notes stay through presets, pages and octaves; their keys glow dimly
-- **PLAY held 0.8 s:** every held note lets go (HOLD stays on); **PLAY pressed:** HOLD off
+| Knob | What it does |
+| --- | --- |
+| LENGTH | 1, 2, 4, 8 or 16 bars |
+| QUANTIZE | notes onto the grid: OFF, 1/16, 1/8, 1/8T; their lengths kept |
+| CLICK | the metronome: OFF, REC (count-in and recording only), ON |
+| BPM | the tempo (70–170), the same as PULSE's; an incoming MIDI clock: EXT |
 
-Tip: HOLD + FREEZE at the top + a chord = an endless cloud to shape with every page.
+**Recording**
+1. On LOOP press **REC**. If the loop is not playing, a bar is counted in (REC blinks), then it records (REC lit).
+2. Play, and turn knobs: K1–K4 on any page and the macros SELECT / ALGORITHM are recorded too.
+3. The loop goes round and every pass adds to it (overdub). A knob already recorded, turned again, replaces its old moves.
+4. **REC** again: recording ends, the loop plays on.
+5. **REC held 1 s** (on LOOP): the loop is cleared.
+
+**Playing:** **PLAY** starts the loop from the top, PLAY again stops it. The knobs move as you recorded them.
+
+**Into your sampler or DAW**
+- **USB audio:** the FM-1 is a USB audio interface: pick it as the input and record its sound digitally, no noise.
+- **In sync:** PLAY sends MIDI start, stop and clock (24 a beat), so your sampler starts with the loop, the take cut to
+  the bar. An outside MIDI start / stop starts and stops the loop too, and GRAIN PIANO follows an outside clock's tempo.
+- Tip: leave CLICK on REC, so no metronome is heard in the take.
+
+The loop is not kept over a power-off.
 
 ## 7. The scales
 
@@ -191,7 +208,7 @@ MIDI out sends the nearest key for notes between the keys.
 
 ## 8. MEMORY
 
-1. Play a short phrase.
+1. Play a short phrase (on any page but LOOP).
 2. Press **REC**: the last 2 seconds are frozen into a cloud of their own (REC lit, "MEM" at the top).
 3. Play over it. Its level and movement are on MAGIC 2 (MEMORY, WANDER); SIZE, DENSITY, SPRAY, HALO and WIDTH shape it too.
 4. Press **REC** again: it fades out.
@@ -215,7 +232,8 @@ Each preset keeps your changes; SAVE keeps them for good; **HOME held 1 s** brin
 
 - **USB-MIDI in:** notes play the piano, on any channel.
 - **USB-MIDI out:** what you play goes out as notes.
-- **MIDI clock in:** PULSE follows it (BPM shows EXT).
+- **MIDI clock in:** PULSE and the loop follow it (BPM shows EXT); an outside start / stop starts and stops the loop.
+- **MIDI clock out:** while the loop plays, MIDI start, clock and stop go out.
 
 ## 11. Good to know
 

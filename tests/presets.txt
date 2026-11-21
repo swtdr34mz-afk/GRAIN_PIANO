@@ -21,9 +21,6 @@ wait 20
 spin PRESET 1
 wait 20
 expect preset 2
-tap PLAY
-wait 30
-expect hold 1
 spin PRESET 1
 wait 50
 expect preset 3
@@ -31,12 +28,11 @@ wav p_aurora.wav
 key w0 down 90
 key w2 down 80
 key w4 down 80
-wait 100
+wait 6000
+wavstop
 key w0 up
 key w2 up
 key w4 up
-wait 6000
-wavstop
 spin PRESET 1
 wait 50
 expect preset 4
@@ -44,12 +40,11 @@ wav p_rain.wav
 key w0 down 90
 key w2 down 80
 key w4 down 80
-wait 100
+wait 6000
+wavstop
 key w0 up
 key w2 up
 key w4 up
-wait 6000
-wavstop
 spin PRESET 1
 wait 50
 expect preset 5
@@ -57,12 +52,11 @@ wav p_dream.wav
 key w0 down 90
 key w2 down 80
 key w4 down 80
-wait 100
+wait 6000
+wavstop
 key w0 up
 key w2 up
 key w4 up
-wait 6000
-wavstop
 expect grains >0
 spin PRESET 1
 wait 50
@@ -71,12 +65,11 @@ wav p_underwater.wav
 key w0 down 90
 key w2 down 80
 key w4 down 80
-wait 100
+wait 6000
+wavstop
 key w0 up
 key w2 up
 key w4 up
-wait 6000
-wavstop
 spin PRESET 1
 wait 50
 expect preset 7
@@ -84,12 +77,11 @@ wav p_stardust.wav
 key w0 down 90
 key w2 down 80
 key w4 down 80
-wait 100
+wait 6000
+wavstop
 key w0 up
 key w2 up
 key w4 up
-wait 6000
-wavstop
 tap GLO
 wait 30
 expect page 6
@@ -102,9 +94,6 @@ tap HOME
 wait 30
 shot stardust_main.png
 # the textures alone, every one, after the notes let go
-press PLAY
-wait 900
-release PLAY
 wait 12000
 tap ARP
 wait 30

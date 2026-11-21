@@ -1,11 +1,9 @@
-# SCALE (SEQ): the keys in a scale, three layouts; HOLD keeps the notes to read their pitch
+# SCALE (SEQ): the keys in a scale, three layouts; lastcents: the last key's pitch x 100
 wait 600
 tap SEQ
 wait 30
 expect page 8
 expect scale 0
-tap PLAY
-wait 30
 # MAJOR, ALL: every key the next step from C3
 spin K1 1
 wait 30
@@ -13,35 +11,30 @@ expect scale 1
 spin K3 1
 spin K3 1
 wait 30
-key 0 down 90
-key 1 down 90
-key 3 down 90
-wait 100
-key 0 up
-key 1 up
-key 3 up
-wait 50
-expect held 3
-expect cents0 4800
-expect cents1 5000
-expect cents2 5300
+tapkey 0
+wait 30
+expect lastcents 4800
+tapkey 1
+wait 30
+expect lastcents 5000
+tapkey 3
+wait 30
+expect lastcents 5300
 # MINOR, SNAP: each key down to the nearest step of C minor (F stays F, F# falls to F, B to Bb)
 spin K1 1
 wait 30
 spin K3 -1
 spin K3 -1
 wait 30
-key 0 down 90
-key 1 down 90
-key 6 down 90
-wait 100
-key 0 up
-key 1 up
-key 6 up
-wait 50
-expect cents0 5300
-expect cents1 5300
-expect cents2 5800
+tapkey 0
+wait 30
+expect lastcents 5300
+tapkey 1
+wait 30
+expect lastcents 5300
+tapkey 6
+wait 30
+expect lastcents 5800
 # MAQAM RAST, ALL: the third between minor and major (a quarter tone)
 spin K1 1
 wait 20
@@ -57,16 +50,13 @@ spin K1 1
 wait 20
 spin K1 1
 wait 20
-wait 30
 expect scale 9
 spin K3 1
 spin K3 1
 wait 30
-key 2 down 90
-wait 100
-key 2 up
-wait 50
-expect cents0 5150
+tapkey 2
+wait 30
+expect lastcents 5150
 shot scale.png
 wav rast.wav
 key 0 down 90
@@ -91,24 +81,13 @@ spin K1 1
 wait 20
 spin K1 1
 wait 20
-wait 30
 expect scale 14
-key 9 down 90
-wait 100
-key 9 up
-wait 50
-expect cents0 6702
-# WHITE: the black keys play nothing
+tapkey 9
+wait 30
+expect lastcents 6702
+# WHITE: the black keys play nothing (the last pitch stays)
 spin K3 -1
 wait 30
-key 1 down 90
-wait 100
-key 1 up
-wait 50
-expect held 1
-expect cents0 6702
-key 2 down 90
-wait 100
-key 2 up
-wait 50
-expect held 1
+tapkey 1
+wait 30
+expect lastcents 6702

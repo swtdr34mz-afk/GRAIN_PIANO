@@ -169,7 +169,7 @@ static int smp_nearest(float m)
 }
 
 /* ------------------------------------------------------------------ the command queue (main loop -> render) --- */
-enum { CMD_ON, CMD_OFF, CMD_ALLOFF, CMD_PANIC, CMD_PRESS, CMD_TEMPO, CMD_MEM };
+enum { CMD_ON, CMD_OFF, CMD_ALLOFF, CMD_PANIC, CMD_PRESS, CMD_TEMPO, CMD_MEM, CMD_SEQ, CMD_SEQCFG, CMD_KNOB };
 typedef struct { uint8_t t; uint16_t note; float pitch, vel; } cmd_t;
 #define QN 64u
 static cmd_t cq[QN];
@@ -191,6 +191,9 @@ void g_all_off(void) { push(CMD_ALLOFF, 0, 0.0f, 0.0f); }
 void g_press(int id, float p) { push(CMD_PRESS, id, 0.0f, p); }
 void g_tempo(float bpm) { push(CMD_TEMPO, 0, bpm, 0.0f); }
 void g_memory(int on) { push(CMD_MEM, on != 0, 0.0f, 0.0f); }
+void g_seq(int op) { push(CMD_SEQ, op, 0.0f, 0.0f); }
+void g_seq_cfg(int bars, int quant, int click) { push(CMD_SEQCFG, bars, (float)quant, (float)click); }
+void g_seq_knob(int k, int v) { push(CMD_KNOB, k, 0.0f, (float)v); }
 void g_panic(void) { push(CMD_PANIC, 0, 0.0f, 0.0f); }
 void g_params(const gparams_t *p)       /* into the buffer the render does not read, then swapped */
 {
@@ -354,6 +357,205 @@ static void voice_tick(voice_t *v)
     v->held = v->pheld;
 }
 
+static void note_off(int id)
+{
+    int i;
+    for (i = 0; i < G_NV; i++) {
+        if (E.v[i].on && E.v[i].kill && E.v[i].pnote == id) E.v[i].pheld = 0;
+        else if (E.v[i].on && E.v[i].note == id) E.v[i].held = 0;
+    }
+}
+
+/* ------------------------------------------------------------------ the sequencer --- */
+/* Notes and knob moves, each at its place in the loop (ticks: 96 a beat), played back live through the engine, so the
+ * sound can be changed while it plays. Recording stamps what comes in at the loop's place (to the grid, with
+ * QUANTIZE: a note keeps its length); a recorded event does not sound again in the pass it was played. A knob moved
+ * while recording replaces that knob's moves of before. Played-back notes are ids | 0x8000, apart from the keys'. */
+#define SEQ_PPQ 96u
+#define SEQ_MAXEV 1536u
+#define SEQ_KQ 64u
+enum { EV_ON, EV_OFF, EV_KNOB };
+typedef struct { uint32_t t; uint16_t id; uint8_t type, k, v, fresh, pad[2]; float pitch; } sev_t;
+static sev_t sev[SEQ_MAXEV];
+static struct {
+    uint32_t n, len, quant;
+    float pos, count, abs;
+    uint8_t play, rec, click;
+    uint32_t touched[2];                /* knobs moved in this recording (their old moves gone) */
+    struct { uint16_t id; uint8_t on; int32_t off; } open[16];   /* recorded notes waiting for their release */
+    float ck_env, ck_ph, ck_inc;        /* the click */
+    uint8_t kq_k[SEQ_KQ], kq_v[SEQ_KQ];
+    volatile uint32_t kq_h, kq_t;
+} S = {.len = 4u * 4u * SEQ_PPQ, .click = CLICK_REC};
+
+static void seq_add(uint32_t t, int type, int id, float pitch, int v, int k)
+{
+    sev_t *e;
+    if (S.n >= SEQ_MAXEV) return;       /* (full: no more) */
+    e = &sev[S.n++];
+    e->t = t % S.len; e->type = (uint8_t)type; e->id = (uint16_t)id; e->pitch = pitch; e->v = (uint8_t)v;
+    e->k = (uint8_t)k; e->fresh = 1;
+}
+static uint32_t seq_now(void) { return (uint32_t)S.pos % S.len; }
+
+static void seq_rec_on(int id, float pitch, float vel)
+{
+    uint32_t t, tq;
+    int i, slot = -1;
+    if (S.rec != 2 || (id & 0x8000)) return;
+    t = seq_now(); tq = t;
+    if (S.quant) tq = ((t + S.quant / 2u) / S.quant) * S.quant;
+    for (i = 0; i < 16; i++) if (!S.open[i].on) { slot = i; break; }
+    if (slot >= 0) { S.open[slot].on = 1; S.open[slot].id = (uint16_t)id; S.open[slot].off = (int32_t)tq - (int32_t)t; }
+    seq_add(tq, EV_ON, id, pitch, (int)(vel * 127.0f + 0.5f), 0);
+}
+static void seq_rec_off(int id)
+{
+    int i;
+    if (S.rec != 2 || (id & 0x8000)) return;
+    for (i = 0; i < 16; i++)
+        if (S.open[i].on && S.open[i].id == id) {
+            int32_t t = (int32_t)seq_now() + S.open[i].off;
+            while (t < 0) t += (int32_t)S.len;
+            seq_add((uint32_t)t, EV_OFF, id, 0.0f, 0, 0);
+            S.open[i].on = 0;
+        }
+}
+static void seq_close(void)             /* recording ends: the notes still down are let go here */
+{
+    int i;
+    for (i = 0; i < 16; i++)
+        if (S.open[i].on) {
+            int32_t t = (int32_t)seq_now() + S.open[i].off;
+            while (t < 0) t += (int32_t)S.len;
+            seq_add((uint32_t)t, EV_OFF, S.open[i].id, 0.0f, 0, 0);
+            S.open[i].on = 0;
+        }
+}
+static void seq_rec_knob(int k, int v)
+{
+    uint32_t i, j;
+    if (S.rec != 2 || k < 0 || k > 63) return;
+    if (!(S.touched[k >> 5] >> (k & 31) & 1u)) {   /* the first move of it in this recording: its old moves go */
+        S.touched[k >> 5] |= 1u << (k & 31);
+        for (i = j = 0; i < S.n; i++)
+            if (!(sev[i].type == EV_KNOB && sev[i].k == k)) sev[j++] = sev[i];
+        S.n = j;
+    }
+    seq_add(seq_now(), EV_KNOB, 0, 0.0f, v, k);
+}
+static void seq_release_all(void)       /* the loop's notes let go */
+{
+    int i;
+    for (i = 0; i < G_NV; i++) {
+        if (E.v[i].on && (E.v[i].note & 0x8000u)) E.v[i].held = 0;
+        if (E.v[i].on && E.v[i].kill && (E.v[i].pnote & 0x8000u)) E.v[i].pheld = 0;
+    }
+}
+static void seq_op(int op)
+{
+    switch (op) {
+    case SEQ_PLAY: S.play = 1; S.rec = 0; S.pos = 0.0f; S.abs = 0.0f; break;
+    case SEQ_STOP:
+        if (S.rec == 2) seq_close();
+        S.play = 0; S.rec = 0;
+        seq_release_all();
+        break;
+    case SEQ_REC_ON:
+        S.touched[0] = S.touched[1] = 0;
+        if (!S.play) { S.play = 1; S.rec = 1; S.count = 4.0f * SEQ_PPQ; S.pos = 0.0f; S.abs = 0.0f; }   /* a bar first */
+        else S.rec = 2;
+        break;
+    case SEQ_REC_OFF: if (S.rec == 2) seq_close(); S.rec = 0; break;
+    case SEQ_CLEAR: S.n = 0; seq_release_all(); { int i; for (i = 0; i < 16; i++) S.open[i].on = 0; } break;
+    default: break;
+    }
+}
+static void seq_cfg(int bars, int quant, int click)
+{
+    S.len = (uint32_t)(bars < 1 ? 1 : bars > 16 ? 16 : bars) * 4u * SEQ_PPQ;
+    S.quant = (uint32_t)(quant < 0 ? 0 : quant);
+    S.click = (uint8_t)click;
+    while (S.pos >= (float)S.len) S.pos -= (float)S.len;
+}
+static void seq_fire(float a, float b)  /* the events in [a, b) */
+{
+    uint32_t i;
+    for (i = 0; i < S.n; i++) {
+        sev_t *e = &sev[i];
+        float t = (float)e->t;
+        if (t < a || t >= b || e->t >= S.len) continue;
+        if (e->fresh) { e->fresh = 0; continue; }   /* (recorded in this pass: it was heard as played) */
+        if (e->type == EV_ON) note_on(e->id | 0x8000, e->pitch, (float)e->v * (1.0f / 127.0f));
+        else if (e->type == EV_OFF) note_off(e->id | 0x8000);
+        else {
+            uint32_t h = S.kq_h, nh = (h + 1u) % SEQ_KQ;
+            if (nh != S.kq_t) { S.kq_k[h] = e->k; S.kq_v[h] = e->v; S.kq_h = nh; }
+        }
+    }
+}
+static void seq_click(int accent)
+{
+    S.ck_env = accent ? 0.32f : 0.2f;
+    S.ck_inc = (accent ? 1760.0f : 1320.0f) / SR;
+    S.ck_ph = 0.0f;
+}
+/* per chunk: the loop moves on; the events, the click and MIDI clock out (24 a beat) on their ticks */
+static void seq_chunk(uint32_t cn, float bpm)
+{
+    float adv, a0, a1;
+    uint32_t q0, q1;
+    if (!S.play) return;
+    adv = (float)cn * bpm * (float)SEQ_PPQ / (60.0f * SR);
+    a0 = S.abs; a1 = a0 + adv; S.abs = a1;
+    q0 = (uint32_t)a0; q1 = (uint32_t)a1;
+    {                                   /* beats: the click (the bar's first, higher) */
+        uint32_t b0 = q0 / SEQ_PPQ, b1 = q1 / SEQ_PPQ;
+        if (a0 == 0.0f || b1 != b0) {
+            uint32_t beat = a0 == 0.0f ? 0u : b1;
+            if (S.click == CLICK_ON || (S.click == CLICK_REC && S.rec)) seq_click(beat % 4u == 0u);
+        }
+    }
+    if (E.ext_bpm <= 20.0f) {           /* MIDI clock out (not while following one) */
+        uint32_t c0 = q0 / (SEQ_PPQ / 24u), c1 = q1 / (SEQ_PPQ / 24u);
+        for (; c0 < c1; c0++) plat_midi_send(0x0Fu | 0xF8u << 8, TO_USB);
+    }
+    if (S.rec == 1) {                   /* the count-in: the loop waits */
+        S.count -= adv;
+        if (S.count <= 0.0f) { S.rec = 2; S.pos = 0.0f; seq_fire(0.0f, 1.0f); }
+        return;
+    }
+    {
+        float p0 = S.pos, p1 = p0 + adv, len = (float)S.len;
+        if (p1 >= len) { seq_fire(p0, len); p1 -= len; seq_fire(0.0f, p1); }
+        else seq_fire(p0, p1);
+        S.pos = p1;
+    }
+}
+
+int g_seq_knob_out(int *k, int *v)
+{
+    uint32_t t = S.kq_t;
+    if (t == S.kq_h) return 0;
+    *k = S.kq_k[t]; *v = S.kq_v[t];
+    S.kq_t = (t + 1u) % SEQ_KQ;
+    return 1;
+}
+int g_seq_state(int *play, int *rec, float *where, int *bar)
+{
+    *play = S.play; *rec = S.rec;
+    *where = S.rec == 1 ? 0.0f : S.pos / (float)S.len;
+    *bar = (int)(S.pos / (4.0f * SEQ_PPQ));
+    return (int)(S.len / (4u * SEQ_PPQ));
+}
+int g_seq_event(int i, float *where, int *kind)
+{
+    if (i < 0 || (uint32_t)i >= S.n) return 0;
+    *where = (float)sev[i].t / (float)S.len;
+    *kind = sev[i].type == EV_KNOB;
+    return 1;
+}
+
 static void run_commands(void)
 {
     int i;
@@ -361,13 +563,11 @@ static void run_commands(void)
         cmd_t c = cq[cq_tail];
         cq_tail = (cq_tail + 1u) % QN;
         switch (c.t) {
-        case CMD_ON: note_on(c.note, c.pitch, c.vel); break;
-        case CMD_OFF:
-            for (i = 0; i < G_NV; i++) {
-                if (E.v[i].on && E.v[i].kill && E.v[i].pnote == c.note) E.v[i].pheld = 0;
-                else if (E.v[i].on && E.v[i].note == c.note) E.v[i].held = 0;
-            }
-            break;
+        case CMD_ON: note_on(c.note, c.pitch, c.vel); seq_rec_on(c.note, c.pitch, c.vel); break;
+        case CMD_OFF: note_off(c.note); seq_rec_off(c.note); break;
+        case CMD_SEQ: seq_op(c.note); break;
+        case CMD_SEQCFG: seq_cfg(c.note, (int)c.pitch, (int)c.vel); break;
+        case CMD_KNOB: seq_rec_knob(c.note, (int)c.vel); break;
         case CMD_PRESS:
             for (i = 0; i < G_NV; i++)
                 if (E.v[i].on && !E.v[i].kill && E.v[i].note == c.note) E.v[i].ptarget = fm_clampf(c.vel, 0.0f, 1.0f);
@@ -613,6 +813,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
         int tick = 0, mem_rec = !E.mem_frozen;
         E.rev_born = 0;
         E.vib_ph += (float)cn * 5.5f / SR; if (E.vib_ph >= 1.0f) E.vib_ph -= 1.0f;
+        seq_chunk(cn, E.ext_bpm > 20.0f ? E.ext_bpm : p->bpm);   /* the loop's notes for this chunk, before the voices */
         if (p->pulse != PULSE_OFF && p->pulse < NPULSE) {   /* PULSE: the beat (an outside clock's tempo wins) */
             static const float DIV[NPULSE] = {1.0f, 1.0f, 0.5f, 1.0f / 3.0f, 0.25f, 0.125f};
             float bpm = E.ext_bpm > 20.0f ? E.ext_bpm : p->bpm, per = SR * 60.0f / fm_maxf(bpm, 20.0f) * DIV[p->pulse];
@@ -895,6 +1096,12 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 R = R * (1.0f - 0.45f * wet) + orr * wet * 1.6f;
             }
             /* out: a soft limit, then MASTER */
+            if (S.ck_env > 0.001f) {    /* the click, dry, beside everything */
+                float ck = fm_sin_turns(S.ck_ph) * S.ck_env;
+                S.ck_ph += S.ck_inc; if (S.ck_ph >= 1.0f) S.ck_ph -= 1.0f;
+                S.ck_env *= 0.9975f;
+                L += ck; R += ck;
+            }
             L = fm_tanhf(L * 1.1f);
             R = fm_tanhf(R * 1.1f);
             {

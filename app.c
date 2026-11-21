@@ -29,7 +29,7 @@
 /* ------------------------------------------------------------------ the knobs --- */
 enum { K_TONE, K_DYN, K_MIX, K_SIZE, K_DENS, K_POS, K_SPRAY, K_ATK, K_REL, K_PEDAL, K_FREEZE, K_LRATE, K_LDEPTH,
        K_LTARGET, K_WOBBLE, K_RSIZE, K_RMIX, K_DELAY, K_FELT, K_REV, K_HALO, K_HAMT, K_WIDTH, K_TEX, K_TLEV, K_TCHAR,
-       K_TREACT, K_PRESS, K_PAMT, K_MLEV, K_MSCAN, K_PULSE, K_BPM, K_SWING, K_PUMP, K_M1, K_M2, NK, K_PRESET = 100, K_SCALE, K_ROOT, K_KEYS, K_LIGHT };   /* (100..: not a preset's own) */
+       K_TREACT, K_PRESS, K_PAMT, K_MLEV, K_MSCAN, K_PULSE, K_BPM, K_SWING, K_PUMP, K_M1, K_M2, NK, K_PRESET = 100, K_SCALE, K_ROOT, K_KEYS, K_LIGHT, K_LEN, K_QUANT, K_CLICK, K_TEMPO };   /* (100..: not a preset's own) */
 static const char *const K_NAME[NK] = {"TONE", "DYNAMICS", "MIX", "SIZE", "DENSITY", "POSITION", "SPRAY", "ATTACK",
     "RELEASE", "PEDAL", "FREEZE", "RATE", "DEPTH", "TARGET", "WOBBLE", "ROOM", "REVERB", "DELAY", "FELT", "REVERSE",
     "HALO", "HALO MIX", "WIDTH", "TEXTURE", "LEVEL", "CHAR", "REACT", "PRESSURE", "AMOUNT", "MEMORY", "WANDER", "PULSE",
@@ -51,9 +51,9 @@ static const char *const *knob_names(int k, uint32_t *n)
     return 0;
 }
 
-enum { PG_MAIN, PG_SEL, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_MAGIC, PG_TEX, PG_SCALE, PG_MAGIC2, PG_PULSE, NPAGE };
+enum { PG_MAIN, PG_SEL, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_MAGIC, PG_TEX, PG_SCALE, PG_MAGIC2, PG_PULSE, PG_LOOP, NPAGE };
 static const char *const PAGE_NAME[NPAGE] = {"MAIN", "PIANO", "GRAINS", "ENVELOPE", "MOVEMENT", "ROOM", "MAGIC",
-                                             "TEXTURE", "SCALE", "MAGIC 2", "PULSE"};
+                                             "TEXTURE", "SCALE", "MAGIC 2", "PULSE", "LOOP"};
 static const uint8_t PAGE_K[NPAGE][4] = {
     {K_POS, K_DENS, K_SIZE, K_MIX},
     {K_PRESET, K_TONE, K_DYN, K_MIX},
@@ -65,7 +65,8 @@ static const uint8_t PAGE_K[NPAGE][4] = {
     {K_TEX, K_TLEV, K_TCHAR, K_TREACT},
     {K_SCALE, K_ROOT, K_KEYS, K_LIGHT},
     {K_PRESS, K_PAMT, K_MLEV, K_MSCAN},
-    {K_PULSE, K_BPM, K_SWING, K_PUMP},
+    {K_PULSE, K_TEMPO, K_SWING, K_PUMP},
+    {K_LEN, K_QUANT, K_CLICK, K_TEMPO},
 };
 
 /* ------------------------------------------------------------------ the presets --- */
@@ -143,6 +144,11 @@ static void settings_load(void)
     if (bad) settings_defaults();
     if (set.rsv2[0] >= 15u || set.rsv2[1] > 11u || set.rsv2[2] > 2u || set.rsv2[3] > 1u)   /* the scale page's (below) */
         set.rsv2[0] = set.rsv2[1] = set.rsv2[2] = set.rsv2[3] = 0;
+    if (set.rsv2[8] != 0xA5u || set.rsv2[4] > 4u || set.rsv2[5] > 3u || set.rsv2[6] > 2u || set.rsv2[7] > 100u) {
+        set.rsv2[4] = 2; set.rsv2[5] = 1; set.rsv2[6] = CLICK_REC; set.rsv2[7] = 50; set.rsv2[8] = 0xA5u;   /* the loop:
+                                                                           4 bars, 1/16, a click while recording, 120 */
+    }
+    set.hold = 0;                        /* (HOLD is gone: PLAY runs the loop) */
 }
 
 static uint8_t *kv(void) { return set.k[set.preset]; }
@@ -229,10 +235,12 @@ static void send_params(void)
     p.rev = F(K_REV); p.halo = k[K_HALO]; p.hamt = F(K_HAMT); p.width = F(K_WIDTH);
     p.tex = k[K_TEX]; p.tlev = F(K_TLEV); p.tchar = F(K_TCHAR); p.treact = F(K_TREACT);
     p.press = k[K_PRESS]; p.pamt = F(K_PAMT); p.mlev = F(K_MLEV); p.mscan = F(K_MSCAN);
-    p.pulse = k[K_PULSE]; p.bpm = 70.0f + (float)k[K_BPM]; p.swing = F(K_SWING); p.pump = F(K_PUMP);
+    p.pulse = k[K_PULSE]; p.bpm = 70.0f + (float)set.rsv2[7];   /* (the tempo: one for all, the loop's and PULSE's) */ p.swing = F(K_SWING); p.pump = F(K_PUMP);
 #undef F
     g_params(&p);
 }
+
+static void send_loop(void);
 
 /* ------------------------------------------------------------------ the scales --- */
 /* Each a list of steps in cents from the root, and the period it repeats at (an octave, 1200, but for ALIEN: an
@@ -325,7 +333,8 @@ static struct {
 static uint16_t key_id[NKEYS];           /* the note each key plays while down (the octave can change meanwhile) */
 static float key_pch[NKEYS];
 static uint8_t key_on[NKEYS];            /* the key plays something (a black key in WHITE does not) */
-static uint8_t snd_midi[512];            /* the notes on, by id: the MIDI note sent out + 1 (0: none) */
+static uint8_t snd_midi[512];
+static float last_pitch;                 /* (the host's checks: the last key's pitch) */            /* the notes on, by id: the MIDI note sent out + 1 (0: none) */
 
 static int note_id(uint32_t k) { return 128 + (int)k + 27 * (set.octave + 2); }
 static void midi_note(int on, int note, int vel)
@@ -394,6 +403,7 @@ static void key_press(uint32_t k, int vel, uint32_t others)
     float pitch;
     key_on[k] = (uint8_t)key_pitch(k, &pitch, &root);
     if (!key_on[k]) return;
+    last_pitch = pitch;
     key_id[k] = (uint16_t)id; key_pch[k] = pitch;
     if (!set.hold) { play(id, pitch, vel); return; }
     if (hd.pending >= 0) {               /* a second key while a held note is pressed alone: a new chord from both */
@@ -467,6 +477,7 @@ void app_init(void)
     g_init();
     piano_ok = (uint8_t)g_samples(piano_data, PIANO_DATA_LEN);
     send_params();
+    send_loop();
 }
 
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
@@ -496,7 +507,7 @@ static struct {
     uint32_t keys, btn;
     uint8_t page;
     uint8_t vel[NKEYS];
-    uint32_t home_t, play_t;             /* HOME / PLAY went down (0: not held, or the hold already acted) */
+    uint32_t home_t, play_t, rec_t;      /* HOME / PLAY / REC went down (0: not held, or the hold already acted) */
     uint32_t turned_at[4];               /* when K1..K4 (as shown) were last turned: lit for a moment */
     uint32_t t_draw;
     uint8_t redraw, mem;                 /* mem: MEMORY asked on (REC) */
@@ -544,19 +555,37 @@ void app_say(const char *a, const char *b)
 }
 
 /* the scale page's four, kept for every preset: their value's place and how many values */
+/* and the loop's (LENGTH, QUANTIZE, CLICK) and the tempo, for every preset too */
+static const char *const LEN_NAME[5] = {"1 BAR", "2 BARS", "4 BARS", "8 BARS", "16 BARS"};
+static const char *const QUANT_NAME[4] = {"OFF", "1/16", "1/8", "1/8T"};
+static const char *const CLICK_NAME[NCLICK] = {"OFF", "REC", "ON"};
 static uint8_t *gk(int which, uint32_t *n)
 {
-    static const uint8_t N[4] = {NSCALE, 12, NKEYMODE, 2};
-    *n = N[(which - K_SCALE) & 3];
-    return &set.rsv2[(which - K_SCALE) & 3];
+    static const uint8_t N[8] = {NSCALE, 12, NKEYMODE, 2, 5, 4, NCLICK, 101};
+    *n = N[(which - K_SCALE) & 7];
+    return &set.rsv2[(which - K_SCALE) & 7];
 }
 static const char *gk_text(int which, int shrt)
 {
+    static char bpm[8];
     uint32_t n, v = *gk(which, &n) % (n ? n : 1u);
     if (which == K_SCALE) return shrt ? SCALES[v].shrt : SCALES[v].name;
     if (which == K_ROOT) return ROOT_NAME[v];
     if (which == K_KEYS) return KEYS_NAME[v];
+    if (which == K_LEN) return LEN_NAME[v];
+    if (which == K_QUANT) return QUANT_NAME[v];
+    if (which == K_CLICK) return CLICK_NAME[v];
+    if (which == K_TEMPO) {              /* the tempo, or the outside clock's */
+        if (ui.ext) return "EXT";
+        int_text(70 + (int32_t)v, bpm);
+        return bpm;
+    }
     return ONOFF_NAME[v & 1u];
+}
+static void send_loop(void)              /* the loop's length, grid and click, to the engine */
+{
+    static const uint8_t BARS[5] = {1, 2, 4, 8, 16}, Q[4] = {0, 24, 48, 32};
+    g_seq_cfg(BARS[set.rsv2[4] % 5u], Q[set.rsv2[5] & 3u], set.rsv2[6] % NCLICK);
 }
 
 static void value_text(int which, char *t)   /* a knob's value as shown */
@@ -578,8 +607,8 @@ static void value_text(int which, char *t)   /* a knob's value as shown */
 }
 static const char *knob_name(int which)
 {
-    static const char *const G[4] = {"SCALE", "ROOT", "KEYS", "LIGHT"};
-    return which == K_PRESET ? "PRESET" : which > K_PRESET ? G[(which - K_SCALE) & 3] : K_NAME[which];
+    static const char *const G[8] = {"SCALE", "ROOT", "KEYS", "LIGHT", "LENGTH", "QUANTIZE", "CLICK", "BPM"};
+    return which == K_PRESET ? "PRESET" : which > K_PRESET ? G[(which - K_SCALE) & 7] : K_NAME[which];
 }
 
 static void preset_step(int32_t d)
@@ -601,10 +630,11 @@ static void knob_turn(int which, int32_t e)
     if (which == K_PRESET) { preset_step(e > 0 ? 1 : -1); return; }
     if (which > K_PRESET) {              /* the scale page: for every preset */
         uint8_t *g = gk(which, &nn);
-        v = clamp((int32_t)*g + (e > 0 ? 1 : -1), 0, (int32_t)nn - 1);
+        v = clamp((int32_t)*g + (which == K_TEMPO ? e * (e > 1 || e < -1 ? 4 : 1) : (e > 0 ? 1 : -1)), 0, (int32_t)nn - 1);
         if (v == *g) return;
         *g = (uint8_t)v;
         set_dirty = 1;
+        if (which >= K_LEN) { send_loop(); send_params(); }
         app_say(knob_name(which), gk_text(which, 0));
         return;
     }
@@ -615,8 +645,23 @@ static void knob_turn(int which, int32_t e)
     k[which] = (uint8_t)v;
     set_dirty = 1;
     send_params();
+    g_seq_knob(which, v);                /* (kept in the loop while it records) */
     value_text(which, t);
     app_say(knob_name(which), t);
+}
+
+static int seq_playing(void)
+{
+    int pl, rc, bar;
+    float w;
+    g_seq_state(&pl, &rc, &w, &bar);
+    return pl;
+}
+static void loop_play(int on)            /* the loop from the top, or stopped; MIDI start / stop out with it */
+{
+    g_seq(on ? SEQ_PLAY : SEQ_STOP);
+    plat_midi_send(0x0Fu | (on ? 0xFAu : 0xFCu) << 8, TO_USB);
+    app_say("LOOP", on ? "PLAY" : "STOP");
 }
 
 static void macro_turn(int m, int32_t e)
@@ -628,6 +673,7 @@ static void macro_turn(int m, int32_t e)
     k[K_M1 + m] = (uint8_t)v;
     set_dirty = 1;
     send_params();
+    g_seq_knob(K_M1 + m, v);
     int_text(v, t);
     app_say(MACRO[set.preset % NPRESET][m].name, t);
 }
@@ -694,8 +740,10 @@ static void input(void)
         case B_EDIT: page_go(PG_EDIT); break;
         case B_GLO: page_go(ui.page == PG_MAGIC ? PG_MAGIC2 : PG_MAGIC); break;   /* again: the second page */
         case B_ARP: page_go(PG_TEX); break;
-        case B_SEQ: page_go(ui.page == PG_SCALE ? PG_PULSE : PG_SCALE); break;
-        case B_REC:                      /* MEMORY: the last seconds played, frozen into a cloud; again, it fades */
+        case B_SEQ: page_go(ui.page == PG_SCALE ? PG_PULSE : ui.page == PG_PULSE ? PG_LOOP : PG_SCALE); break;
+        case B_REC:                      /* on LOOP: record (decided on release: held 1 s, the loop is cleared);
+                                          * elsewhere MEMORY: the last seconds played, frozen into a cloud */
+            if (ui.page == PG_LOOP) { ui.rec_t = now ? now : 1u; break; }
             if (g_memory_on() && ui.mem) { g_memory(0); ui.mem = 0; app_say("MEMORY", "FADES"); }
             else { g_memory(1); ui.mem = 1; ui.mem_t = now; app_say("MEMORY", "FROZEN"); }
             break;
@@ -721,18 +769,24 @@ static void input(void)
             app_say("RESET", PRESET_NAME[set.preset]);
         }
     }
-    if (ui.play_t) {                     /* PLAY: a press, HOLD on / off; held 0.8 s, the held notes let go */
-        if (btn >> B_PLAY & 1u) {
-            if (now - ui.play_t >= 800u) {
-                ui.play_t = 0;
-                held_clear(-1);
-                hd.pending = -1;
-                app_say("HOLD", "ALL OFF");
-            }
+    if (ui.play_t) {                     /* PLAY: the loop starts from the top, or stops */
+        ui.play_t = 0;
+        loop_play(!seq_playing());
+    }
+    if (ui.rec_t) {                      /* REC on LOOP: a press records (again: it stops recording); held 1 s, cleared */
+        if (btn >> B_REC & 1u) {
+            if (now - ui.rec_t >= 1000u) { ui.rec_t = 0; g_seq(SEQ_CLEAR); app_say("LOOP", "CLEARED"); }
         } else {
-            ui.play_t = 0;
-            hold_set(!set.hold, keys);
-            app_say("HOLD", set.hold ? "ON" : "OFF");
+            int pl, rc, bar;
+            float w;
+            ui.rec_t = 0;
+            g_seq_state(&pl, &rc, &w, &bar);
+            if (rc) { g_seq(SEQ_REC_OFF); app_say("LOOP", "PLAYS"); }
+            else {
+                if (!pl) plat_midi_send(0x0Fu | 0xFAu << 8, TO_USB);   /* (it starts: MIDI start out) */
+                g_seq(SEQ_REC_ON);
+                app_say("LOOP", pl ? "RECORDING" : "COUNT-IN");
+            }
         }
     }
     ui.btn = btn;
@@ -747,11 +801,15 @@ static void input(void)
     /* the lights: the page's button, PLAY while HOLD is on, SAVE when something changed; the keys down bright, the
      * held notes' keys dim */
     {
-        static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX, B_GLO, B_ARP, B_SEQ, B_GLO, B_SEQ};
+        static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX, B_GLO, B_ARP, B_SEQ, B_GLO, B_SEQ,
+                                          B_SEQ};
         lit_btn = 1u << PB[ui.page];
-        if (set.hold) lit_btn |= 1u << B_PLAY | LED_PLAY_GREEN;
+        int pl, rc, bar;
+        float w;
+        g_seq_state(&pl, &rc, &w, &bar);
+        if (pl) lit_btn |= 1u << B_PLAY | LED_PLAY_GREEN;
         if (set_dirty) lit_btn |= 1u << B_SAVE;
-        if (ui.mem) lit_btn |= 1u << B_REC;
+        if (ui.mem || rc == 2 || (rc == 1 && (now / 250u) & 1u)) lit_btn |= 1u << B_REC;   /* (blinking: the count-in) */
     }
     lit_keys = keys;
     for (i = 0; i < hd.n; i++) {
@@ -856,6 +914,35 @@ static void draw_cloud(int32_t y0, int32_t h)
     }
 }
 
+static float w_loop;
+/* the LOOP page: the loop's bars, where it is, its notes (gold) and knob moves (dusk, below), what REC does */
+static void draw_loop(int32_t y0, int32_t h, uint32_t now)
+{
+    int pl, rc, bar, bars = g_seq_state(&pl, &rc, &w_loop, &bar), i, kind;
+    int32_t x0 = 10, w = 220, b;
+    float wh;
+    (void)now;
+    cv_text(10, y0 + 2, &FONT_T, "REC", COL_LABEL);
+    cv_text(34, y0 + 2, &FONT_T, rc == 2 ? "RECORDING" : rc == 1 ? "COUNT-IN" : "RECORDS (HELD 1 S: CLEARS)",
+            rc ? COL_EMBER : COL_GOLD);
+    cv_text(10, y0 + 15, &FONT_T, "PLAY", COL_LABEL);
+    cv_text(34, y0 + 15, &FONT_T, pl ? "STOPS" : "PLAYS FROM THE TOP", COL_GOLD);
+    for (b = 0; b <= bars; b++) {        /* the bars */
+        int32_t x = x0 + w * b / bars;
+        cv_rect(x, y0 + 32, 1, h - 36, b % 4 == 0 ? COL_LABEL : COL_LINE);
+    }
+    cv_rect(x0, y0 + h - 4, w, 1, COL_LINE);
+    for (i = 0; g_seq_event(i, &wh, &kind); i++) {
+        int32_t x = x0 + (int32_t)(wh * (float)w);
+        if (kind) cv_rect(x, y0 + h - 12, 1, 4, COL_DUSK);
+        else cv_rect(x - 1, y0 + 38 + (i * 7) % (h - 56), 3, 3, COL_GOLD);
+    }
+    if (pl && rc != 1) {                 /* where it is */
+        int32_t x = x0 + (int32_t)(w_loop * (float)w);
+        cv_rect(x, y0 + 30, 1, h - 30, rc ? COL_EMBER : COL_IVORY);
+    }
+}
+
 static void draw_knobs(int32_t y0, uint32_t now)
 {
     uint32_t i;
@@ -893,6 +980,7 @@ static void draw_keys(void)
     uint32_t held = 0, i;
     char t[12];
     int j;
+    float w;
     for (j = 0; j < hd.n; j++) {
         int32_t kk = held_key(j);
         if (kk >= 0) held |= 1u << kk;
@@ -908,10 +996,15 @@ static void draw_keys(void)
         uint16_t c = (ui.keys >> k & 1u) ? COL_IVORY : (held >> k & 1u) ? COL_EMBER : COL_NIGHT;
         cv_rect(4 + (int32_t)AT[i] * 14 + 8, 4, 11, 12, c);
     }
-    cv_text(4, 36, &FONT_XS, "HOLD", set.hold ? COL_GOLD : COL_LINE);
-    if (set.hold && hd.n) {
-        t[0] = 0; int_text(hd.n, t); text_cat(t, hd.n == 1 ? " NOTE" : " NOTES");
-        cv_text(40, 36, &FONT_XS, t, COL_IVORY);
+    {                                    /* the loop: stopped, playing (its bar), counting in, recording */
+        int pl, rc, bar, bars = g_seq_state(&pl, &rc, &w, &bar);
+        const char *st = rc == 2 ? "REC" : rc == 1 ? "COUNT" : pl ? "PLAY" : "STOP";
+        cv_text(4, 36, &FONT_XS, st, rc ? COL_EMBER : pl ? COL_GOLD : COL_LINE);
+        if (pl && rc != 1) {
+            char u[6];
+            t[0] = 0; int_text(bar + 1, t); text_cat(t, "/"); int_text(bars, u); text_cat(t, u);
+            cv_text(44, 36, &FONT_XS, t, COL_IVORY);
+        }
     }
     cv_text(150, 36, &FONT_XS, "OCT", COL_LABEL);
     t[0] = set.octave < 0 ? '-' : '+'; t[1] = (char)('0' + (set.octave < 0 ? -set.octave : set.octave)); t[2] = 0;
@@ -926,7 +1019,8 @@ static void draw(uint32_t now)
 {
     draw_header(now);
     cv_begin(240, 144, C_BLACK);
-    draw_cloud(0, ui.page == PG_MAIN ? 92 : 80);
+    if (ui.page == PG_LOOP) draw_loop(0, 80, now);
+    else draw_cloud(0, ui.page == PG_MAIN ? 92 : 80);
     draw_knobs(ui.page == PG_MAIN ? 96 : 92, now);
     cv_blit(0, 36);
     draw_keys();
@@ -1054,11 +1148,19 @@ void app_frame(void)
                 ui.clk_n = 1; ui.clk_t0 = now;
             }
         }
+        if (st == 0xFAu || st == 0xFBu) { g_seq(SEQ_PLAY); app_say("LOOP", "PLAY"); }   /* an outside start / stop */
+        else if (st == 0xFCu) { g_seq(SEQ_STOP); app_say("LOOP", "STOP"); }
         if ((st & 0xF0u) == 0x90u && d2) g_note_on((int)d1, (float)d1, (float)d2 * (1.0f / 127.0f));
         else if ((st & 0xF0u) == 0x80u || (st & 0xF0u) == 0x90u) g_note_off((int)d1);
     }
     if (ui.ext && now - ui.clk_last > 1000u) { ui.ext = 0; g_tempo(0.0f); ui.redraw = 1; }   /* the clock stopped */
     if (ui.mem && !g_memory_on() && now - ui.mem_t > 300u) { ui.mem = 0; ui.redraw = 1; }   /* (nothing played yet) */
+    {                                    /* the loop's knob moves, played back: the knobs follow them */
+        int kk, vv, any = 0;
+        while (g_seq_knob_out(&kk, &vv))
+            if (kk >= 0 && kk < NK) { kv()[kk] = (uint8_t)vv; any = 1; }
+        if (any) { send_params(); ui.redraw = 1; }
+    }
     ann_tick(now);
     if (ui.msg_until && now >= ui.msg_until) { ui.msg_until = 0; ui.redraw = 1; }
     if (ui.intro) {                      /* the splash: to its end, or until a key or a button */
@@ -1090,7 +1192,20 @@ int app_expect(const char *what, int *got)
     else if (!strncmp(what, "cents", 5) && what[5] >= '0' && what[5] <= '7')   /* cents0..7: a held note's pitch x 100 */
         *got = what[5] - '0' < hd.n ? (int)(hd.pitch[what[5] - '0'] * 100.0f + 0.5f) : -1;
     else if (!strcmp(what, "scale")) *got = SC;
+    else if (!strncmp(what, "ev", 2) && what[2] >= '0' && what[2] <= '9') {   /* evN: event N's place x 1000 */
+        float w;
+        int kd;
+        *got = g_seq_event(atoi(what + 2), &w, &kd) ? (int)(w * 1000.0f + 0.5f) : -1;
+    } else if (!strcmp(what, "lastcents")) *got = (int)(last_pitch * 100.0f + 0.5f);
     else if (!strcmp(what, "intro")) *got = ui.intro;
+    else if (!strcmp(what, "seq_play") || !strcmp(what, "seq_rec") || !strcmp(what, "seq_events")) {
+        int pl, rc, bar, kd;
+        float w;
+        g_seq_state(&pl, &rc, &w, &bar);
+        if (what[4] == 'p') *got = pl;
+        else if (what[4] == 'r') *got = rc;
+        else { int n = 0; while (g_seq_event(n, &w, &kd)) n++; *got = n; }
+    }
     else if (!strcmp(what, "memory")) *got = g_memory_on();
     else if (!strcmp(what, "ext")) *got = ui.ext;
     else if (!strcmp(what, "page")) *got = ui.page;

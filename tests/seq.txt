@@ -1,0 +1,86 @@
+# the LOOP (SEQ three times): REC counts a bar in, records notes and knob moves; PLAY plays them back
+wait 600
+tap SEQ
+wait 30
+tap SEQ
+wait 30
+tap SEQ
+wait 30
+expect page 11
+expect seq_play 0
+# 1 bar, 1/16, 120 BPM: a bar is 2 s
+spin K1 -1
+wait 20
+spin K1 -1
+wait 20
+expect seq_events 0
+tap REC
+wait 100
+expect seq_rec 1
+expect seq_play 1
+shot loop_count.png
+wait 2000
+expect seq_rec 2
+# four notes in the bar, and BLOOM (SELECT) turned up in the middle of it
+key w0 down 90
+wait 200
+key w0 up
+wait 300
+key w4 down 90
+wait 200
+key w4 up
+spin SELECT 20
+wait 300
+key w7 down 90
+wait 200
+key w7 up
+wait 300
+key w9 down 90
+wait 200
+key w9 up
+wait 300
+expect seq_events >8
+tap REC
+wait 100
+expect seq_rec 0
+expect seq_play 1
+shot loop_rec.png
+# BLOOM down by hand: the loop's move brings it back up
+spin SELECT -40
+wait 50
+expect k_MACRO_1 0
+wav loop.wav
+wait 4000
+wavstop
+expect k_MACRO_1 >0
+expect grains >0
+expect clocks_out >0
+# PLAY stops it; the notes let go
+tap PLAY
+wait 100
+expect seq_play 0
+wait 6000
+expect grains 0
+# PLAY starts it from the top
+tap PLAY
+wait 600
+expect seq_play 1
+expect grains >0
+tap PLAY
+wait 100
+# REC held 1 s on LOOP: cleared
+press REC
+wait 1100
+release REC
+wait 100
+expect seq_events 0
+# away from LOOP, REC is MEMORY again
+tap HOME
+wait 30
+key w4 down 90
+wait 400
+key w4 up
+tap REC
+wait 100
+expect memory 1
+expect seq_rec 0

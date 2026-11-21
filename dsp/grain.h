@@ -47,6 +47,17 @@ void g_press(int id, float p);          /* a key's pressure, 0..1 (PRESS_*) */
 void g_tempo(float bpm);                /* an outside MIDI clock's tempo; 0: none (PULSE plays at its own BPM) */
 void g_memory(int on);                  /* MEMORY: 1 the last seconds played, frozen into a cloud of their own; 0 it fades */
 int g_memory_on(void);
+/* the sequencer: notes and knob moves in a loop of 1 .. 16 bars at the tempo (gparams_t bpm, or an outside clock) */
+enum { SEQ_STOP, SEQ_PLAY, SEQ_REC_ON, SEQ_REC_OFF, SEQ_CLEAR };
+enum { CLICK_OFF, CLICK_REC, CLICK_ON, NCLICK };
+void g_seq(int op);                     /* SEQ_*: play from the top / stop, record (from a bar's count-in when stopped) */
+void g_seq_cfg(int bars, int quant_ticks, int click);   /* its length, the grid notes land on (0: as played), CLICK_* */
+void g_seq_knob(int k, int v);          /* a knob moved: kept in the loop while it records */
+int g_seq_knob_out(int *k, int *v);     /* a knob move the loop plays back: 1 = one (the app sets it) */
+/* where it is: playing, recording (1 the count-in, 2 recording), the place 0..1, the bar (0 ..), the events (for the
+ * screen: each one's place 0..1 and kind, 0 a note, 1 a knob) */
+int g_seq_state(int *play, int *rec, float *where, int *bar);
+int g_seq_event(int i, float *where, int *kind);
 void g_all_off(void);                   /* every note released (they fade) */
 void g_panic(void);                     /* silence now */
 void g_render(int32_t *lr, uint32_t n, float gain);

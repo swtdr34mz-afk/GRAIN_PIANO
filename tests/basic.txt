@@ -2,14 +2,13 @@
 #   python3 fm1-base/tools/build.py . --host, then build/host/grainpiano_host tests/basic.txt build/host
 wait 600
 expect piano 1
-expect page 0
 expect preset 0
-expect hold 0
-shot boot.png
-# without HOLD: a note sounds while its key is down
+expect seq_play 0
+# a key ends the splash, and plays
 key w7 down 100
 wait 300
-expect held 0
+expect intro 0
+expect page 0
 expect grains >0
 shot main_playing.png
 key w7 up
@@ -28,59 +27,7 @@ wait 600
 key w9 up
 wait 2500
 wavstop
-# HOLD on: keys pressed together are one chord, and stay
-tap PLAY
-wait 30
-expect hold 1
-key w0 down 100
-key w2 down 90
-key w4 down 90
-wait 200
-key w0 up
-key w2 up
-key w4 up
-wait 500
-expect held 3
-expect held0 53
-# a new key alone: a new chord, the old one lets go
-key w5 down 100
-wait 100
-key w5 up
-wait 100
-expect held 1
-expect held0 62
-# a second key while one is down: it adds (the first, alone, began a new chord)
-key w7 down 100
-wait 100
-key w9 down 100
-wait 100
-key w7 up
-key w9 up
-wait 100
-expect held 2
-key w4 down 100
-key w7 down 100
-key w9 down 100
-wait 100
-key w4 up
-key w7 up
-key w9 up
-wait 100
-expect held 3
-# a held note tapped alone: only it lets go
-key w9 down 100
-wait 120
-key w9 up
-wait 100
-expect held 2
-# a held note pressed and kept down: a new chord from it
-key w7 down 100
-wait 600
-key w7 up
-wait 100
-expect held 1
-expect held0 65
-# pages and knobs work while it sounds, no key down
+# the pages
 tap EDIT
 wait 30
 expect page 2
@@ -101,19 +48,16 @@ tap SEL
 wait 30
 expect page 1
 shot sel.png
-# PLAY held: every held note lets go, HOLD stays on
-press PLAY
-wait 900
-release PLAY
+tap SEQ
 wait 30
-expect held 0
-expect hold 1
-# HOLD off
-tap PLAY
+tap SEQ
 wait 30
-expect hold 0
-# the presets: each played as a held chord, recorded
-tap PLAY
+tap SEQ
+wait 30
+expect page 11
+shot loop_empty.png
+# the presets, recorded: a chord held each
+tap HOME
 wait 30
 turn PRESET 1
 wait 50
@@ -122,12 +66,11 @@ wav felt.wav
 key w2 down 90
 key w4 down 80
 key w6 down 80
-wait 100
+wait 5000
+wavstop
 key w2 up
 key w4 up
 key w6 up
-wait 5000
-wavstop
 turn PRESET 1
 wait 50
 expect preset 2
@@ -135,16 +78,10 @@ wav cloud.wav
 key w0 down 90
 key w4 down 80
 key w7 down 80
-wait 100
-key w0 up
-key w4 up
-key w7 up
 wait 7000
 wavstop
-tap HOME
-wait 30
 shot cloud.png
-# FREEZE at the top: the cloud stands still and keeps sounding as long as it is held
+# FREEZE at the top: the cloud stands still and keeps sounding while the keys are down
 tap ENV
 wait 30
 spin K4 50
@@ -152,10 +89,9 @@ wait 100
 expect k_FREEZE 100
 wait 4000
 expect grains >0
-# HOLD off: they let go
-tap PLAY
-wait 30
-expect held 0
+key w0 up
+key w4 up
+key w7 up
 wait 20000
 expect grains 0
 # a preset keeps its changes; HOME held 1 s gives it back as it came
@@ -170,8 +106,7 @@ expect dirty 0
 reboot
 wait 600
 expect preset 2
-expect hold 0
-# notes one after another without HOLD, more than eight voices: no click when a voice is taken
+# notes one after another, more than eight voices: no click when a voice is taken
 wav steal.wav
 key w0 down 90
 wait 180

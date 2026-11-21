@@ -41,17 +41,14 @@ expect k_PULSE 2
 spin K4 30
 wait 20
 shot pulse.png
-tap PLAY
-wait 30
 key w0 down 90
 key w4 down 90
-wait 100
-key w0 up
-key w4 up
 wait 1000
 wav pulse.wav
 wait 4000
 wavstop
+key w0 up
+key w4 up
 # an outside clock: its tempo is followed (EXT), and let go when it stops
 clock 60 21
 expect ext 1
