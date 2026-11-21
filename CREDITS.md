@@ -9,5 +9,5 @@ GRAIN PIANO by swtdr34mz, under GPL-3.0-only.
 | [felucca-bsp](https://github.com/hugelton/felucca-bsp) | Leo Kuroshita (Hügelton Instruments) and contributors | MPL-2.0 | the hardware layer, update loader, packaging |
 | [Tonitor](https://github.com/nzimas/tonitor) | Nuno Zimas | GPL-3.0-only | the idea and the page layout (FX, SEL, ENV, LFO, EDIT); no code copied |
 | [CHORD RUN](https://github.com/swtdr34mz-afk/CHORD_RUN) | swtdr34mz (after Blop / OSR-1 by Obsimo) | GPL-3.0-only | the piano sampler's ADPCM reader, the build workflow |
-| [UnifrakturMaguntia](https://github.com/google/fonts/tree/main/ofl/unifrakturmaguntia) | j. 'mach' wust (after Peter Wiegel) | SIL OFL 1.1 | the splash's title (`assets/fonts/`, rasterised by `tools/gen_title.py`) |
+| [Press Start 2P](https://github.com/google/fonts/tree/main/ofl/pressstart2p) | The Press Start 2P Project Authors (CodeMan38) | SIL OFL 1.1 | the splash's title (`assets/fonts/`, rasterised by `tools/gen_title.py`) |
 | JieLi AC79 SDK | JieLi Technology | Apache-2.0 | three files in each `.fwsc` package (fetched at build time) |

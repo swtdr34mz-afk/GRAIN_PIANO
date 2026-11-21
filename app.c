@@ -933,7 +933,8 @@ static void draw(uint32_t now)
 }
 
 /* ------------------------------------------------------------------ the splash --- */
-/* "Grain" over "Piano" in a fraktur (UnifrakturMaguntia, tools/gen_title.py), shimmering gold on black: a highlight
+/* GRAIN over PIANO in an 8-bit handheld's pixel type (Press Start 2P, tools/gen_title.py), shimmering gold on black, a
+ * dark shadow under it: a highlight
  * sweeps across it, the gold breathes; then it breaks, left to right, into grains the wind takes to the right, and
  * they glow out. "by swtdr34mz" small under it. About 4.5 s at the start (a key or a button skips it). */
 #include "title_data.h"
@@ -999,8 +1000,8 @@ static void title_draw(uint32_t t)
                 py = (float)title_gy[i] + (float)title_gd[i] * (0.35f / 128.0f) * 40.0f * u - 6.0f * u * u;
                 {
                     uint16_t c = dim565(gold_lut[(uint32_t)(153.0f + 102.0f * life)], (uint32_t)(life * 256.0f));
-                    cv_pset((int32_t)px, yt + (int32_t)py, c);
-                    if (title_gl[i] > 153u) cv_pset((int32_t)px + 1, yt + (int32_t)py, c);
+                    int32_t gx = (int32_t)px, gy = yt + (int32_t)py;   /* a 2 x 2 grain: chunky, as the type */
+                    cv_pset(gx, gy, c); cv_pset(gx + 1, gy, c); cv_pset(gx, gy + 1, c); cv_pset(gx + 1, gy + 1, c);
                 }
             }
     }
@@ -1009,7 +1010,13 @@ static void title_draw(uint32_t t)
     by = t < 800u ? t * 256u / 800u : t < INTRO_SHIM + INTRO_DIS ? 256u :
          t < INTRO_SHIM + INTRO_DIS + INTRO_END ? 256u - (t - INTRO_SHIM - INTRO_DIS) * 256u / INTRO_END : 0u;
     cv_begin(240, 20, C_BLACK);
-    cv_text((240 - text_w(&FONT_XS, "by swtdr34mz")) / 2, 2, &FONT_XS, "by swtdr34mz", dim565(gold_lut[120], by));
+    {                                    /* in the title's pixel type */
+        int32_t bx = (240 - BY_W) / 2;
+        uint16_t c = dim565(gold_lut[130], by);
+        for (y = 0; y < BY_H; y++)
+            for (x = 0; x < BY_W; x++)
+                if (title_by[y * BY_W + x]) cv_pset(bx + x, 6 + y, c);
+    }
     cv_blit(0, 206);
 }
 

@@ -227,4 +227,4 @@ Each preset keeps your changes; SAVE keeps them for good; **HOME held 1 s** brin
 
 GRAIN PIANO by **swtdr34mz**, GPL-3.0. Piano: **Salamander Grand Piano V3** by Alexander Holm (CC-BY 3.0). Built on
 **fm1-base** (Charles Vestal) and **felucca-bsp** (Leo Kuroshita, Hügelton Instruments). Inspired by **Tonitor**
-(Nuno Zimas). The splash's typeface: **UnifrakturMaguntia** (SIL OFL 1.1).
+(Nuno Zimas). The splash's typeface: **Press Start 2P** (SIL OFL 1.1).

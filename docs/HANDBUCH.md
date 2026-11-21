@@ -237,4 +237,4 @@ Preset auf Werkseinstellung zurück.
 
 GRAIN PIANO von **swtdr34mz**, GPL-3.0. Flügel: **Salamander Grand Piano V3** von Alexander Holm (CC-BY 3.0).
 Gebaut auf **fm1-base** (Charles Vestal) und **felucca-bsp** (Leo Kuroshita, Hügelton Instruments). Inspiriert von
-**Tonitor** (Nuno Zimas). Schrift des Startbildschirms: **UnifrakturMaguntia** (SIL OFL 1.1).
+**Tonitor** (Nuno Zimas). Schrift des Startbildschirms: **Press Start 2P** (SIL OFL 1.1).
