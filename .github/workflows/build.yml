@@ -1,14 +1,15 @@
 # Builds the firmware (.fwsc, installable on an FM-1) on GitHub's machines, which can reach JieLi's toolchain server.
 # Also runs the host simulator's tests (a failing test does not stop the build).
 # Result: Actions tab > the run > "Artifacts" > grainpiano-firmware.
-# On a tag (v1.0, v1.1 ...) the release gets the .fwsc. Every push to main also puts GRAIN PIANO in the browser
+# A release published on GitHub (its tag v1.0, v1.1 ...) is built as that version and gets the .fwsc. Every push to main also puts GRAIN PIANO in the browser
 # (fm1-base's emulator: the same app compiled to WebAssembly) on GitHub Pages: https://swtdr34mz-afk.github.io/GRAIN_PIANO/emu/
 # (the Firmware Hub card's play key, fmhub.json "play"; Settings > Pages > Source: GitHub Actions).
 name: Build firmware
 on:
   push:
     branches: [main]
-    tags: ['v*']
+  release:
+    types: [published]         # a release made on GitHub's page: built as that version, the .fwsc attached to it
   workflow_dispatch:
 
 permissions:
