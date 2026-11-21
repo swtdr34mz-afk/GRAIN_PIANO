@@ -1,0 +1,24 @@
+# GRAIN PIANO build settings (fm1-base tools/build.py)
+name = "grainpiano"             # the build's file names: grainpiano-1.0.fwsc, build/host/grainpiano_host
+title = "GRAIN PIANO"           # the name people see (firmware hubs)
+id_prefix = "FM-1_572"          # package identity: dev FM-1_57200, releases FM-1_572 + XXYYZZ (CHORD RUN is 571)
+usb_manufacturer = "swtdr34mz"
+usb_product = "GRAIN PIANO FM-1"
+o2 = ["dsp/grain.c"]            # the sound engine, at -O2
+include = ["dsp"]
+vendored = ["fm1-base/"]
+words = "words.tsv"
+font_full = ["L"]
+ble = false
+backup = true                   # backup and restore of the settings (and the resource region's transfer)
+resources = "res/piano.bin"     # the grand piano's samples (tools/make_piano.py), the same region as CHORD RUN's
+resources_what = "the grand piano's samples"
+tagline = "A granular grand piano"
+repo = "https://github.com/swtdr34mz-afk/GRAIN_PIANO"
+licence = "GPL-3.0-only"
+credits = "Built on fm1-base (Charles Vestal) and felucca-bsp (Leo Kuroshita, Hügelton Instruments); inspired by Tonitor (Nuno Zimas); piano: Salamander Grand Piano V3 (Alexander Holm, CC-BY 3.0)."
+author = "swtdr34mz"
+description = "One instrument: a sampled grand piano (the Salamander Grand Piano) that a granulator breaks into grains. Five pages of four knobs: the piano (preset, tone, dynamics, mix), the grains (size, density, position, spray), the envelope (attack, release, pedal, freeze), an LFO and the room (reverb, delay, felt). A smart HOLD keeps the notes sounding while you shape them: new chords replace the old, a held note pressed again lets go. Five presets, each keeps your changes."
+tags = ["sampler", "ambient", "synth"]
+install = "https://github.com/swtdr34mz-afk/GRAIN_PIANO/releases"
+screenshot = "site/img/screen-main.png"
