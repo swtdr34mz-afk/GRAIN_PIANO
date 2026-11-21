@@ -50,8 +50,6 @@ expect page 1
 shot sel.png
 tap SEQ
 wait 30
-tap SEQ
-wait 30
 expect page 11
 shot loop_empty.png
 # the presets, recorded: a chord held each

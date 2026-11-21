@@ -2,8 +2,6 @@
 wait 600
 tap SEQ
 wait 30
-tap SEQ
-wait 30
 expect page 11
 # 2 bars (4 s at 120), QUANTIZE OFF
 spin K1 -1

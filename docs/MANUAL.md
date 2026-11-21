@@ -14,7 +14,7 @@ floating clouds, glittering pads, and notes between the piano's keys.
 1. Play a few notes. You hear the piano and, over it, its cloud of grains.
 2. Turn **SELECT** and **ALGORITHM**: the preset's two macros, that bring it to life.
 3. Turn **PRESET**: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST.
-4. Press **SEQ** twice (the LOOP page), then **REC**: after a bar's count-in you record a loop, your knob moves
+4. Press **SEQ** (the LOOP page), then **REC**: after a bar's count-in you record a loop, your knob moves
    too. **PLAY** starts and stops it.
 5. Turn **K1–K4**. The lit button shows the page you are on.
 6. Press **SAVE** to keep your settings (it is lit when something changed).
@@ -72,6 +72,14 @@ louder. The dotted lines show where each note is read. The gold square marks POS
 | POSITION | where in the note: hammer ↔ tail |
 | SPRAY | scatter in position and pitch; past the middle, octaves and fifths now and then |
 
+### EDIT again – TEXTURE
+| Knob | What it does |
+| --- | --- |
+| TEXTURE | a sound under the piano: RAIN, VINYL, TAPE, WIND, SEA, ROOM (all made in the FM-1, no recordings) |
+| LEVEL | its level |
+| CHAR | light ↔ heavy (drizzle ↔ downpour, calm ↔ high waves …) |
+| REACT | it follows your playing: louder as you play, quieter in the pauses |
+
 ### ENV – ENVELOPE
 | Knob | What it does |
 | --- | --- |
@@ -120,15 +128,7 @@ louder. The dotted lines show where each note is read. The gold square marks POS
 | MEMORY | the MEMORY cloud's level |
 | WANDER | how fast the MEMORY cloud moves through the phrase (0: still) |
 
-### ARP – TEXTURE
-| Knob | What it does |
-| --- | --- |
-| TEXTURE | a sound under the piano: RAIN, VINYL, TAPE, WIND, SEA, ROOM (all made in the FM-1, no recordings) |
-| LEVEL | its level |
-| CHAR | light ↔ heavy (drizzle ↔ downpour, calm ↔ high waves …) |
-| REACT | it follows your playing: louder as you play, quieter in the pauses |
-
-### SEQ – SCALE (for every preset)
+### ARP – SCALE (for every preset)
 | Knob | What it does |
 | --- | --- |
 | SCALE | the scale (chapter 7) |
@@ -156,7 +156,7 @@ The macros are kept per preset (SAVE). The pages show the knobs as you set them,
 
 ## 6. LOOP, the sequencer
 
-Press **SEQ** twice (SCALE → **LOOP**). The loop records **notes and knob moves**, not sound: it all plays
+Press **SEQ** (the **LOOP** page). The loop records **notes and knob moves**, not sound: it all plays
 live through GRAIN PIANO, so after recording you can change the preset, the macros, the scale, the room, anything, and
 the loop sounds new at once.
 

@@ -86,7 +86,11 @@ tap GLO
 wait 30
 expect page 6
 shot magic.png
-tap ARP
+tap HOME
+wait 30
+tap EDIT
+wait 30
+tap EDIT
 wait 30
 expect page 7
 shot texture.png
@@ -95,7 +99,11 @@ wait 30
 shot stardust_main.png
 # the textures alone, every one, after the notes let go
 wait 12000
-tap ARP
+tap HOME
+wait 30
+tap EDIT
+wait 30
+tap EDIT
 wait 30
 spin K1 -1
 wait 20

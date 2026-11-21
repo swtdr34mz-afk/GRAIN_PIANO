@@ -16,7 +16,7 @@ Klaviertasten.
 2. Dreh an **SELECT** und **ALGORITHM**: die zwei Makros des Presets, die es richtig aufleben lassen.
 3. Dreh am **PRESET**-Regler: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER,
    STARDUST.
-4. Drück **SEQ** zweimal (Seite LOOP) und dann **REC**: Nach einem Takt Einzähler nimmst du einen Loop auf, auch deine
+4. Drück **SEQ** (Seite LOOP) und dann **REC**: Nach einem Takt Einzähler nimmst du einen Loop auf, auch deine
    Reglerbewegungen. **PLAY** startet und stoppt ihn.
 5. Dreh an **K1–K4**. Welche Seite gerade aktiv ist, zeigt der leuchtende Knopf.
 6. Drück **SAVE**, um deine Einstellungen zu behalten. SAVE leuchtet, wenn sich etwas geändert hat.
@@ -76,6 +76,14 @@ unten zeigt POSITION. Oben links stehen die zwei Makros (SELECT, ALGORITHM).
 | POSITION | wo im Ton gelesen wird: Hammer ↔ Ausklang |
 | SPRAY | Streuung in Position und Tonhöhe. Ab der Mitte kommen ab und zu Oktaven und Quinten dazu. |
 
+### EDIT nochmal – TEXTURE
+| Regler | Funktion |
+| --- | --- |
+| TEXTURE | ein Geräusch unter dem Klavier: RAIN, VINYL, TAPE, WIND, SEA, ROOM. Alles wird im FM-1 selbst erzeugt, es gibt keine Aufnahmen. |
+| LEVEL | Lautstärke |
+| CHAR | Charakter: leicht ↔ heftig (Nieselregen ↔ Platzregen, ruhige ↔ hohe Wellen …) |
+| REACT | Die Textur folgt deinem Spiel: lauter beim Spielen, leiser in den Pausen. |
+
 ### ENV – ENVELOPE
 | Regler | Funktion |
 | --- | --- |
@@ -124,15 +132,7 @@ unten zeigt POSITION. Oben links stehen die zwei Makros (SELECT, ALGORITHM).
 | MEMORY | Lautstärke der MEMORY-Wolke |
 | WANDER | wie schnell die MEMORY-Wolke durch die Phrase wandert (0 = steht still) |
 
-### ARP – TEXTURE
-| Regler | Funktion |
-| --- | --- |
-| TEXTURE | ein Geräusch unter dem Klavier: RAIN, VINYL, TAPE, WIND, SEA, ROOM. Alles wird im FM-1 selbst erzeugt, es gibt keine Aufnahmen. |
-| LEVEL | Lautstärke |
-| CHAR | Charakter: leicht ↔ heftig (Nieselregen ↔ Platzregen, ruhige ↔ hohe Wellen …) |
-| REACT | Die Textur folgt deinem Spiel: lauter beim Spielen, leiser in den Pausen. |
-
-### SEQ – SCALE (gilt für alle Presets)
+### ARP – SCALE (gilt für alle Presets)
 | Regler | Funktion |
 | --- | --- |
 | SCALE | die Skala (siehe Kapitel 7) |
@@ -162,7 +162,7 @@ ohne den Anteil der Makros.
 
 ## 6. LOOP – der Sequencer
 
-Drück **SEQ** zweimal (SCALE → **LOOP**). Der Loop nimmt **Noten und Reglerbewegungen** auf, keinen Ton.
+Drück **SEQ** (Seite **LOOP**). Der Loop nimmt **Noten und Reglerbewegungen** auf, keinen Ton.
 Alles spielt live durch GRAIN PIANO. Nach der Aufnahme kannst du also Preset, Makros, Skala, Hall und alles andere
 ändern, und der Loop klingt sofort anders.
 

@@ -1,6 +1,6 @@
-# SCALE (SEQ): the keys in a scale, three layouts; lastcents: the last key's pitch x 100
+# SCALE (ARP): the keys in a scale, three layouts; lastcents: the last key's pitch x 100
 wait 600
-tap SEQ
+tap ARP
 wait 30
 expect page 8
 expect scale 0
