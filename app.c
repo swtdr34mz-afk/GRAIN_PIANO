@@ -29,7 +29,7 @@
 /* ------------------------------------------------------------------ the knobs --- */
 enum { K_TONE, K_DYN, K_MIX, K_SIZE, K_DENS, K_POS, K_SPRAY, K_ATK, K_REL, K_PEDAL, K_FREEZE, K_LRATE, K_LDEPTH,
        K_LTARGET, K_WOBBLE, K_RSIZE, K_RMIX, K_DELAY, K_FELT, K_REV, K_HALO, K_HAMT, K_WIDTH, K_TEX, K_TLEV, K_TCHAR,
-       K_TREACT, NK, K_PRESET = 100 };
+       K_TREACT, NK, K_PRESET = 100, K_SCALE, K_ROOT, K_KEYS, K_LIGHT };   /* (100..: not a preset's own) */
 static const char *const K_NAME[NK] = {"TONE", "DYNAMICS", "MIX", "SIZE", "DENSITY", "POSITION", "SPRAY", "ATTACK",
     "RELEASE", "PEDAL", "FREEZE", "RATE", "DEPTH", "TARGET", "WOBBLE", "ROOM", "REVERB", "DELAY", "FELT", "REVERSE",
     "HALO", "HALO MIX", "WIDTH", "TEXTURE", "LEVEL", "CHAR", "REACT"};
@@ -46,9 +46,9 @@ static const char *const *knob_names(int k, uint32_t *n)
     return 0;
 }
 
-enum { PG_MAIN, PG_SEL, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_MAGIC, PG_TEX, NPAGE };
+enum { PG_MAIN, PG_SEL, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_MAGIC, PG_TEX, PG_SCALE, NPAGE };
 static const char *const PAGE_NAME[NPAGE] = {"MAIN", "PIANO", "GRAINS", "ENVELOPE", "MOVEMENT", "ROOM", "MAGIC",
-                                             "TEXTURE"};
+                                             "TEXTURE", "SCALE"};
 static const uint8_t PAGE_K[NPAGE][4] = {
     {K_POS, K_DENS, K_SIZE, K_MIX},
     {K_PRESET, K_TONE, K_DYN, K_MIX},
@@ -58,6 +58,7 @@ static const uint8_t PAGE_K[NPAGE][4] = {
     {K_RSIZE, K_RMIX, K_DELAY, K_FELT},
     {K_REV, K_HALO, K_HAMT, K_WIDTH},
     {K_TEX, K_TLEV, K_TCHAR, K_TREACT},
+    {K_SCALE, K_ROOT, K_KEYS, K_LIGHT},
 };
 
 /* ------------------------------------------------------------------ the presets --- */
@@ -127,6 +128,8 @@ static void settings_load(void)
             if (set.k[i][j] > (nn ? nn - 1u : 100u)) bad = 1;
         }
     if (bad) settings_defaults();
+    if (set.rsv2[0] >= 15u || set.rsv2[1] > 11u || set.rsv2[2] > 2u || set.rsv2[3] > 1u)   /* the scale page's (below) */
+        set.rsv2[0] = set.rsv2[1] = set.rsv2[2] = set.rsv2[3] = 0;
 }
 
 static uint8_t *kv(void) { return set.k[set.preset]; }
@@ -147,95 +150,189 @@ static void send_params(void)
     g_params(&p);
 }
 
+/* ------------------------------------------------------------------ the scales --- */
+/* Each a list of steps in cents from the root, and the period it repeats at (an octave, 1200, but for ALIEN: an
+ * octave and a fifth). The piano's samples are retuned freely, so steps between the keys are no trouble. */
+typedef struct { const char *name, *shrt; uint8_t n; float period; float c[13]; } scale_t;
+static const scale_t SCALES[] = {
+    {"CHROMATIC", "CHROM", 12, 1200.0f, {0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100}},
+    {"MAJOR", "MAJOR", 7, 1200.0f, {0, 200, 400, 500, 700, 900, 1100}},
+    {"MINOR", "MINOR", 7, 1200.0f, {0, 200, 300, 500, 700, 800, 1000}},
+    {"PHONK", "PHONK", 7, 1200.0f, {0, 100, 300, 500, 700, 800, 1000}},          /* phrygian: the dark half step */
+    {"TRAP", "TRAP", 7, 1200.0f, {0, 200, 300, 500, 700, 800, 1100}},           /* harmonic minor: the dark flute */
+    {"DRILL", "DRILL", 7, 1200.0f, {0, 200, 300, 600, 700, 800, 1100}},         /* hungarian minor: more tension */
+    {"LOFI", "LOFI", 7, 1200.0f, {0, 200, 300, 500, 700, 900, 1000}},           /* dorian: warm, nostalgic */
+    {"DREAMCORE", "DREAM", 7, 1200.0f, {0, 200, 400, 600, 700, 900, 1100}},     /* lydian: floating */
+    {"ARABIC", "ARABIC", 7, 1200.0f, {0, 100, 400, 500, 700, 800, 1100}},       /* double harmonic */
+    {"MAQAM RAST", "RAST", 7, 1200.0f, {0, 200, 350, 500, 700, 900, 1050}},     /* quarter tones: the neutral 3rd, 7th */
+    {"OVERTONE", "OVERT.", 8, 1200.0f, {0, 203.9f, 386.3f, 551.3f, 702.0f, 840.5f, 968.8f, 1088.3f}},   /* harmonics 8..15 */
+    {"PELOG", "PELOG", 7, 1200.0f, {0, 120, 270, 540, 670, 785, 950}},          /* the gamelan's tuning */
+    {"FLOAT MAJ9", "MAJ9", 5, 1200.0f, {0, 200, 400, 700, 1100}},               /* only a maj9's notes */
+    {"FLOAT MIN11", "MIN11", 6, 1200.0f, {0, 200, 300, 500, 700, 1000}},        /* only a m11's notes */
+    {"ALIEN", "ALIEN", 9, 1901.955f, {0, 292.6f, 438.9f, 585.2f, 877.8f, 1024.1f, 1316.7f, 1463.0f, 1755.6f}},
+    /* (Bohlen-Pierce, its lambda mode: 13 equal steps of an octave and a fifth, 9 of them) */
+};
+#define NSCALE (sizeof SCALES / sizeof SCALES[0])
+_Static_assert(sizeof SCALES / sizeof SCALES[0] == 15u, "settings_load checks the scale against 15");
+enum { KEYS_SNAP, KEYS_WHITE, KEYS_ALL, NKEYMODE };
+static const char *const KEYS_NAME[NKEYMODE] = {"SNAP", "WHITE", "ALL"};
+static const char *const ROOT_NAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+static const char *const ONOFF_NAME[2] = {"OFF", "ON"};
+#define SC (set.rsv2[0])                 /* the scale, the root, the keys' layout, the roots lit: for every preset */
+#define ROOT (set.rsv2[1])
+#define KEYMODE (set.rsv2[2])
+#define LIGHT (set.rsv2[3])
+
+/* a degree's pitch, MIDI (fractions too), from the root's C at octave base */
+static float degree_pitch(float base, int32_t d)
+{
+    const scale_t *sc = &SCALES[SC % NSCALE];
+    int32_t per = d >= 0 ? d / sc->n : -((-d + sc->n - 1) / sc->n), st = d - per * sc->n;
+    return base + ((float)per * sc->period + sc->c[st]) * 0.01f;
+}
+
+/* what key k plays: 0 = nothing (a black key in WHITE); the pitch, and whether it is a root */
+static int key_pitch(uint32_t k, float *pitch, int *root)
+{
+    static const uint8_t WK[16] = PLAT_WHITE_KEYS;
+    const scale_t *sc = &SCALES[SC % NSCALE];
+    float base = 48.0f + (float)(ROOT % 12u) + 12.0f * (float)set.octave;   /* the root, in the octave of C3 */
+    int32_t d = 0, i;
+    if (KEYMODE == KEYS_ALL || KEYMODE == KEYS_WHITE) {
+        if (KEYMODE == KEYS_ALL) d = (int32_t)k;
+        else {
+            for (i = 0; i < 16 && WK[i] != k; i++) {}
+            if (i == 16) return 0;
+            d = i;
+        }
+        if (base < 53.0f - 6.0f) base += 12.0f;   /* (the first key near F3) */
+        *pitch = degree_pitch(base, d);
+        *root = (d % sc->n) == 0;
+        return 1;
+    }
+    {                                    /* SNAP: the key's own pitch, to the nearest step at or below it */
+        float c = (53.0f + (float)k + 12.0f * (float)set.octave - (base - 12.0f)) * 100.0f, best = -1e9f, x;
+        int32_t per = (int32_t)(c / sc->period), bd = 0;
+        for (i = -1; i <= 1; i++) {
+            int32_t s2;
+            for (s2 = 0; s2 < sc->n; s2++) {
+                x = (float)(per + i) * sc->period + sc->c[s2];
+                if (x <= c + 0.5f && x > best) { best = x; bd = s2; }
+            }
+        }
+        *pitch = base - 12.0f + best * 0.01f;
+        *root = bd == 0 && c - best < 0.5f;
+        return 1;
+    }
+}
+
 /* ------------------------------------------------------------------ the notes and HOLD --- */
+/* A note's id: the key and the octave it was played in (128 ..), or a MIDI note (0..127). Two keys may play the same
+ * pitch (SNAP), they are still two notes. */
 #define NHELD 8
 static struct {
-    uint8_t note[NHELD];                 /* the held notes (HOLD), oldest first */
+    uint16_t id[NHELD];                  /* the held notes (HOLD), oldest first */
+    float pitch[NHELD];
     uint8_t n;
     int16_t pending;                     /* a held note pressed alone: let go if tapped, a new chord if kept (-1 none) */
     uint8_t pending_key;
     uint32_t pending_t;
-    uint8_t chord_new;                   /* the first key of a new chord came down: the old notes go when it lands */
-} hd = {{0}, 0, -1, 0, 0, 0};
-static uint8_t key_note[NKEYS];          /* the note each key sounds while down (the octave can change meanwhile) */
-static uint8_t sounding[128];            /* notes on, from the keys (without HOLD) or held: for MIDI out and the screen */
+} hd = {{0}, {0}, 0, -1, 0, 0};
+static uint16_t key_id[NKEYS];           /* the note each key plays while down (the octave can change meanwhile) */
+static float key_pch[NKEYS];
+static uint8_t key_on[NKEYS];            /* the key plays something (a black key in WHITE does not) */
+static uint8_t snd_midi[512];            /* the notes on, by id: the MIDI note sent out + 1 (0: none) */
 
+static int note_id(uint32_t k) { return 128 + (int)k + 27 * (set.octave + 2); }
 static void midi_note(int on, int note, int vel)
 {
     plat_midi_send((on ? 0x09u | 0x90u << 8 : 0x08u | 0x80u << 8) | (uint32_t)note << 16 | (uint32_t)(on ? vel : 64) << 24,
                    TO_USB);
 }
-static void play(int note, int vel)
+static void play(int id, float pitch, int vel)
 {
-    g_note_on(note, (float)vel * (1.0f / 127.0f));
-    if (sounding[note]) midi_note(0, note, 0);
-    sounding[note] = 1;
-    midi_note(1, note, vel);
+    int mn = clamp((int32_t)(pitch + 0.5f), 0, 127);
+    g_note_on(id, pitch, (float)vel * (1.0f / 127.0f));
+    if (snd_midi[id & 511]) midi_note(0, snd_midi[id & 511] - 1, 0);
+    snd_midi[id & 511] = (uint8_t)(mn + 1);
+    midi_note(1, mn, vel);
 }
-static void stop(int note)
+static void stop(int id)
 {
-    g_note_off(note);
-    if (sounding[note]) midi_note(0, note, 0);
-    sounding[note] = 0;
+    g_note_off(id);
+    if (snd_midi[id & 511]) midi_note(0, snd_midi[id & 511] - 1, 0);
+    snd_midi[id & 511] = 0;
 }
 
-static int held_find(int note)
+static int held_find(int id)
 {
     int i;
     for (i = 0; i < hd.n; i++)
-        if (hd.note[i] == note) return i;
+        if (hd.id[i] == id) return i;
     return -1;
 }
-static void held_drop(int i)             /* one held note lets go */
+static void held_remove(int i)
 {
     int j;
-    stop(hd.note[i]);
-    for (j = i; j + 1 < hd.n; j++) hd.note[j] = hd.note[j + 1];
+    for (j = i; j + 1 < hd.n; j++) { hd.id[j] = hd.id[j + 1]; hd.pitch[j] = hd.pitch[j + 1]; }
     hd.n--;
 }
-static void held_add(int note, int vel)
+static void held_drop(int i) { stop(hd.id[i]); held_remove(i); }   /* one held note lets go */
+static void held_add(int id, float pitch, int vel)
 {
-    int i = held_find(note);
-    if (i >= 0) { play(note, vel); return; }   /* (already held: struck again) */
+    int i = held_find(id);
+    if (i >= 0) { hd.pitch[i] = pitch; play(id, pitch, vel); return; }   /* (already held: struck again) */
     if (hd.n >= NHELD) held_drop(0);    /* the oldest goes */
-    hd.note[hd.n++] = (uint8_t)note;
-    play(note, vel);
+    hd.id[hd.n] = (uint16_t)id; hd.pitch[hd.n] = pitch; hd.n++;
+    play(id, pitch, vel);
 }
 static void held_clear(int keep)         /* every held note lets go, but keep (-1: none) */
 {
     int i = 0;
     while (i < hd.n) {
-        if (hd.note[i] == keep) { i++; continue; }
+        if (hd.id[i] == keep) { i++; continue; }
         held_drop(i);
     }
 }
-static int key_down_any(uint32_t keys) { return keys != 0u; }
 
-/* a key went down; keys: the others already down */
+/* a held note's key, if it was played in the octave now (-1: not on the keys now) */
+static int32_t held_key(int i)
+{
+    int32_t id = hd.id[i] - 128;
+    if (id < 0 || id / 27 - 2 != set.octave) return -1;
+    return id % 27;
+}
+
+/* a key went down; others: the keys already down */
 static void key_press(uint32_t k, int vel, uint32_t others)
 {
-    int note = clamp(53 + (int32_t)k + 12 * set.octave, 0, 127);
-    key_note[k] = (uint8_t)note;
-    if (!set.hold) { play(note, vel); return; }
+    int id = note_id(k), root;
+    float pitch;
+    key_on[k] = (uint8_t)key_pitch(k, &pitch, &root);
+    if (!key_on[k]) return;
+    key_id[k] = (uint16_t)id; key_pch[k] = pitch;
+    if (!set.hold) { play(id, pitch, vel); return; }
     if (hd.pending >= 0) {               /* a second key while a held note is pressed alone: a new chord from both */
         held_clear(hd.pending);
         hd.pending = -1;
-        held_add(note, vel);
+        held_add(id, pitch, vel);
         return;
     }
-    if (!key_down_any(others)) {         /* the first key of a gesture */
-        if (held_find(note) >= 0) {      /* a held note: tapped, it goes; kept, a new chord from it (decided later) */
-            hd.pending = (int16_t)note; hd.pending_key = (uint8_t)k; hd.pending_t = plat_ms();
+    if (!others) {                       /* the first key of a gesture */
+        int h = held_find(id);
+        if (h >= 0 && fm_fabsf(hd.pitch[h] - pitch) < 0.01f) {   /* a held note (as it sounds): tapped, it goes; kept,
+                                                                   * a new chord from it (decided later) */
+            hd.pending = (int16_t)id; hd.pending_key = (uint8_t)k; hd.pending_t = plat_ms();
             return;
         }
         held_clear(-1);                  /* a new chord: the old one lets go */
     }
-    held_add(note, vel);
+    held_add(id, pitch, vel);
 }
 
 static void key_release(uint32_t k)
 {
-    int note = key_note[k];
+    if (!key_on[k]) return;
     if (set.hold) {
         if (hd.pending >= 0 && hd.pending_key == k) {   /* a held note tapped alone: it lets go */
             int i = held_find(hd.pending);
@@ -244,7 +341,7 @@ static void key_release(uint32_t k)
         }
         return;
     }
-    stop(note);
+    stop(key_id[k]);
 }
 
 static void hold_tick(uint32_t now)      /* a held note pressed alone and kept down: a new chord from it */
@@ -263,18 +360,17 @@ static void hold_set(int on, uint32_t keys)
     hd.pending = -1;
     if (on) {                            /* the keys down now become the held chord */
         held_clear(-1);
-        hd.n = 0;
         for (k = 0; k < NKEYS; k++)
-            if (keys >> k & 1u) {
-                if (hd.n < NHELD) hd.note[hd.n++] = key_note[k];
+            if ((keys >> k & 1u) && key_on[k] && hd.n < NHELD) {
+                hd.id[hd.n] = key_id[k]; hd.pitch[hd.n] = key_pch[k]; hd.n++;
             }
     } else {                             /* let go, but the keys still down */
         int i = 0;
         while (i < hd.n) {
             int down = 0;
             for (k = 0; k < NKEYS; k++)
-                if ((keys >> k & 1u) && key_note[k] == hd.note[i]) down = 1;
-            if (down) { int j; for (j = i; j + 1 < hd.n; j++) hd.note[j] = hd.note[j + 1]; hd.n--; }
+                if ((keys >> k & 1u) && key_on[k] && key_id[k] == hd.id[i]) down = 1;
+            if (down) held_remove(i);
             else held_drop(i);
         }
     }
@@ -357,10 +453,27 @@ void app_say(const char *a, const char *b)
     }
 }
 
+/* the scale page's four, kept for every preset: their value's place and how many values */
+static uint8_t *gk(int which, uint32_t *n)
+{
+    static const uint8_t N[4] = {NSCALE, 12, NKEYMODE, 2};
+    *n = N[(which - K_SCALE) & 3];
+    return &set.rsv2[(which - K_SCALE) & 3];
+}
+static const char *gk_text(int which, int shrt)
+{
+    uint32_t n, v = *gk(which, &n) % (n ? n : 1u);
+    if (which == K_SCALE) return shrt ? SCALES[v].shrt : SCALES[v].name;
+    if (which == K_ROOT) return ROOT_NAME[v];
+    if (which == K_KEYS) return KEYS_NAME[v];
+    return ONOFF_NAME[v & 1u];
+}
+
 static void value_text(int which, char *t)   /* a knob's value as shown */
 {
     t[0] = 0;
     if (which == K_PRESET) { text_cat(t, PRESET_NAME[set.preset]); return; }
+    if (which > K_PRESET) { text_cat(t, gk_text(which, 0)); return; }
     {
         uint32_t nn;
         const char *const *nm = knob_names(which, &nn);
@@ -368,7 +481,11 @@ static void value_text(int which, char *t)   /* a knob's value as shown */
     }
     int_text(kv()[which], t);
 }
-static const char *knob_name(int which) { return which == K_PRESET ? "PRESET" : K_NAME[which]; }
+static const char *knob_name(int which)
+{
+    static const char *const G[4] = {"SCALE", "ROOT", "KEYS", "LIGHT"};
+    return which == K_PRESET ? "PRESET" : which > K_PRESET ? G[(which - K_SCALE) & 3] : K_NAME[which];
+}
 
 static void preset_step(int32_t d)
 {
@@ -385,8 +502,17 @@ static void knob_turn(int which, int32_t e)
     char t[24];
     uint8_t *k = kv();
     int32_t v;
-    if (which == K_PRESET) { preset_step(e > 0 ? 1 : -1); return; }
     uint32_t nn;
+    if (which == K_PRESET) { preset_step(e > 0 ? 1 : -1); return; }
+    if (which > K_PRESET) {              /* the scale page: for every preset */
+        uint8_t *g = gk(which, &nn);
+        v = clamp((int32_t)*g + (e > 0 ? 1 : -1), 0, (int32_t)nn - 1);
+        if (v == *g) return;
+        *g = (uint8_t)v;
+        set_dirty = 1;
+        app_say(knob_name(which), gk_text(which, 0));
+        return;
+    }
     if (knob_names(which, &nn)) v = clamp((int32_t)k[which] + (e > 0 ? 1 : -1), 0, (int32_t)nn - 1);
     else v = clamp((int32_t)k[which] + e * (e > 1 || e < -1 ? 3 : 2), 0, 100);   /* a quick turn goes further */
     if (v == k[which]) return;
@@ -451,6 +577,7 @@ static void input(void)
         case B_EDIT: page_go(PG_EDIT); break;
         case B_GLO: page_go(PG_MAGIC); break;
         case B_ARP: page_go(PG_TEX); break;
+        case B_SEQ: page_go(PG_SCALE); break;
         case B_HOME: ui.home_t = now ? now : 1u; page_go(PG_MAIN); break;
         case B_PLAY: ui.play_t = now ? now : 1u; break;
         case B_OCTDN: octave_step(-1); break;
@@ -499,17 +626,26 @@ static void input(void)
     /* the lights: the page's button, PLAY while HOLD is on, SAVE when something changed; the keys down bright, the
      * held notes' keys dim */
     {
-        static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX, B_GLO, B_ARP};
+        static const uint8_t PB[NPAGE] = {B_HOME, B_SEL, B_EDIT, B_ENV, B_LFO, B_FX, B_GLO, B_ARP, B_SEQ};
         lit_btn = 1u << PB[ui.page];
         if (set.hold) lit_btn |= 1u << B_PLAY | LED_PLAY_GREEN;
         if (set_dirty) lit_btn |= 1u << B_SAVE;
     }
     lit_keys = keys;
     for (i = 0; i < hd.n; i++) {
-        int32_t kk = (int32_t)hd.note[i] - 53 - 12 * set.octave;
-        if (kk >= 0 && kk < NKEYS) dim_keys |= 1u << kk;
+        int32_t kk = held_key(i);
+        if (kk >= 0) dim_keys |= 1u << kk;
     }
     plat_lights(lit_btn, lit_keys, 0, dim_keys, 1);
+    {                                    /* LIGHT: the roots' keys a little brighter */
+        uint32_t mid = 0;
+        for (k = 0; LIGHT && k < NKEYS; k++) {
+            float pt;
+            int root;
+            if (key_pitch(k, &pt, &root) && root) mid |= 1u << k;
+        }
+        plat_lights_mid(0, mid);
+    }
 }
 
 void app_input_only(void) { input(); }
@@ -597,7 +733,11 @@ static void draw_knobs(int32_t y0, uint32_t now)
         char t[24];
         cv_text(x, y0, &FONT_XS, knob_name(which), lit ? COL_IVORY : COL_LABEL);
         value_text(which, t);
-        if (which == K_PRESET) {         /* the short name: a cell is 59 pixels wide */
+        if (which > K_PRESET) {          /* the scale page */
+            uint32_t n2, v2 = *gk(which, &n2);
+            cv_text(x, y0 + 16, &FONT_B, gk_text(which, 1), lit ? COL_IVORY : COL_GOLD);
+            fill = wbar * ((int32_t)v2 + 1) / (int32_t)n2;
+        } else if (which == K_PRESET) {  /* the short name: a cell is 59 pixels wide */
             cv_text(x, y0 + 16, &FONT_B, PRESET_SHORT[set.preset], lit ? COL_IVORY : COL_GOLD);
             fill = wbar * ((int32_t)set.preset + 1) / NPRESET;
         } else if (knob_names(which, &nn)) {
@@ -620,8 +760,8 @@ static void draw_keys(void)
     char t[12];
     int j;
     for (j = 0; j < hd.n; j++) {
-        int32_t kk = (int32_t)hd.note[j] - 53 - 12 * set.octave;
-        if (kk >= 0 && kk < NKEYS) held |= 1u << kk;
+        int32_t kk = held_key(j);
+        if (kk >= 0) held |= 1u << kk;
     }
     cv_begin(240, 56, C_BLACK);
     for (i = 0; i < 16u; i++) {
@@ -675,7 +815,7 @@ void app_frame(void)
     while (plat_midi_in(&pkt, &port)) {  /* MIDI in plays the piano (any channel) */
         uint32_t st = (pkt >> 8) & 0xFFu, d1 = (pkt >> 16) & 0x7Fu, d2 = (pkt >> 24) & 0x7Fu;
         (void)port;
-        if ((st & 0xF0u) == 0x90u && d2) g_note_on((int)d1, (float)d2 * (1.0f / 127.0f));
+        if ((st & 0xF0u) == 0x90u && d2) g_note_on((int)d1, (float)d1, (float)d2 * (1.0f / 127.0f));
         else if ((st & 0xF0u) == 0x80u || (st & 0xF0u) == 0x90u) g_note_off((int)d1);
     }
     ann_tick(now);
@@ -694,7 +834,10 @@ int app_expect(const char *what, int *got)
     if (!strcmp(what, "hold")) *got = set.hold;
     else if (!strcmp(what, "held")) *got = hd.n;
     else if (!strncmp(what, "held", 4) && what[4] >= '0' && what[4] <= '7')   /* held0..held7: the notes */
-        *got = what[4] - '0' < hd.n ? hd.note[what[4] - '0'] : -1;
+        *got = what[4] - '0' < hd.n ? (int)(hd.pitch[what[4] - '0'] + 0.5f) : -1;
+    else if (!strncmp(what, "cents", 5) && what[5] >= '0' && what[5] <= '7')   /* cents0..7: a held note's pitch x 100 */
+        *got = what[5] - '0' < hd.n ? (int)(hd.pitch[what[5] - '0'] * 100.0f + 0.5f) : -1;
+    else if (!strcmp(what, "scale")) *got = SC;
     else if (!strcmp(what, "page")) *got = ui.page;
     else if (!strcmp(what, "preset")) *got = set.preset;
     else if (!strcmp(what, "octave")) *got = set.octave;

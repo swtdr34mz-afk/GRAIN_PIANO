@@ -28,10 +28,19 @@ note's pitch, taken from a point that moves through the sound (from the hammer t
 | FX | ROOM: ROOM (size), REVERB, DELAY, FELT (damped, warm) |
 | GLO | MAGIC: REVERSE (grains played backwards), HALO (octave, fifth, oct+5th, major, minor, sus, maj9), HALO MIX, WIDTH |
 | ARP | TEXTURE: TEXTURE (rain, vinyl, tape, wind, sea, room: made in the FM-1, no recordings), LEVEL, CHAR (light .. heavy), REACT (it follows your playing) |
+| SEQ | SCALE (for every preset): SCALE, ROOT, KEYS (SNAP: each key to the scale's step at or below it; WHITE: the white keys in a row, the black ones silent; ALL: every key the next step), LIGHT (the roots' keys lit) |
 | K1..K4 | The page's four knobs |
 | PRESET | The preset: CONCERT GRAND, FELT PIANO, CLOUD, AURORA, MIDNIGHT RAIN, DREAMCORE, UNDERWATER, STARDUST. Each keeps your changes |
 | SELECT / ALGORITHM | POSITION and SPRAY, on every page |
 | SAVE | Keep the settings (lit: something changed) |
+
+### The scales
+
+CHROMATIC, MAJOR, MINOR; PHONK (phrygian), TRAP (harmonic minor), DRILL (hungarian minor), LOFI (dorian), DREAMCORE
+(lydian), ARABIC (double harmonic); and some between the piano's keys: MAQAM RAST (quarter tones), OVERTONE (the
+harmonic series 8..15), PELOG (the gamelan's tuning), FLOAT MAJ9 and FLOAT MIN11 (only a chord's notes), ALIEN
+(Bohlen-Pierce: it repeats at an octave and a fifth, not the octave). The samples are retuned freely, so every step
+sounds where it should; MIDI out sends the nearest key.
 
 ### The smart HOLD
 

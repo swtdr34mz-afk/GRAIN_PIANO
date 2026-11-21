@@ -34,8 +34,10 @@ void g_init(void);
 /* the piano's samples (res/piano.bin, tools/make_piano.py: "PNO1"); 1 = taken, 0 = none there */
 int g_samples(const uint8_t *p, uint32_t len);
 void g_params(const gparams_t *p);
-void g_note_on(int note, float vel);    /* MIDI note, velocity 0..1; the same note again strikes it again */
-void g_note_off(int note);
+/* a note: id names it (the same id again strikes it again; g_note_off lets it go), pitch in MIDI semitones, fractions
+ * too (the scales between the piano's keys), velocity 0..1 */
+void g_note_on(int id, float pitch, float vel);
+void g_note_off(int id);
 void g_all_off(void);                   /* every note released (they fade) */
 void g_panic(void);                     /* silence now */
 void g_render(int32_t *lr, uint32_t n, float gain);

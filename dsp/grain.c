@@ -165,25 +165,25 @@ static int smp_nearest(float m)
 
 /* ------------------------------------------------------------------ the command queue (main loop -> render) --- */
 enum { CMD_ON, CMD_OFF, CMD_ALLOFF, CMD_PANIC };
-typedef struct { uint8_t t, note; float vel; } cmd_t;
+typedef struct { uint8_t t; uint16_t note; float pitch, vel; } cmd_t;
 #define QN 64u
 static cmd_t cq[QN];
 static volatile uint32_t cq_head, cq_tail;
 static gparams_t pbuf[2];
 static volatile uint32_t pcur;
 
-static void push(uint8_t t, int note, float vel)
+static void push(uint8_t t, int note, float pitch, float vel)
 {
     uint32_t h = cq_head, nh = (h + 1u) % QN;
     if (nh == cq_tail) return;          /* full (the render is not running): dropped */
-    cq[h].t = t; cq[h].note = (uint8_t)(note & 127); cq[h].vel = vel;
+    cq[h].t = t; cq[h].note = (uint16_t)note; cq[h].pitch = pitch; cq[h].vel = vel;
     __asm__ volatile("" ::: "memory");
     cq_head = nh;
 }
-void g_note_on(int note, float vel) { push(CMD_ON, note, vel); }
-void g_note_off(int note) { push(CMD_OFF, note, 0.0f); }
-void g_all_off(void) { push(CMD_ALLOFF, 0, 0.0f); }
-void g_panic(void) { push(CMD_PANIC, 0, 0.0f); }
+void g_note_on(int id, float pitch, float vel) { push(CMD_ON, id, fm_clampf(pitch, 12.0f, 120.0f), vel); }
+void g_note_off(int id) { push(CMD_OFF, id, 0.0f, 0.0f); }
+void g_all_off(void) { push(CMD_ALLOFF, 0, 0.0f, 0.0f); }
+void g_panic(void) { push(CMD_PANIC, 0, 0.0f, 0.0f); }
 void g_params(const gparams_t *p)       /* into the buffer the render does not read, then swapped */
 {
     uint32_t nx = pcur ^ 1u;
@@ -194,9 +194,10 @@ void g_params(const gparams_t *p)       /* into the buffer the render does not r
 
 /* ------------------------------------------------------------------ state (render side) --- */
 typedef struct {
-    uint8_t on, held, note, e, dry_on, ng;
-    uint8_t kill, pnote, pheld;         /* taken for another note: it fades out in ~3 ms first (no click), then pnote */
-    float pvel, kf;                     /* that note's velocity; the fade (1 = none) */
+    uint8_t on, held, e, dry_on, ng;
+    uint8_t kill, pheld;                /* taken for another note: it fades out in ~3 ms first (no click), then pnote */
+    uint16_t note, pnote;               /* the note's id, the next one's */
+    float m, pm, pvel, kf;              /* the pitch (MIDI, fractions too), the next note's pitch and velocity; the fade */
     float vel, amp, pan, rate;          /* rate: the step through its sample for its pitch (per chunk, with the wobble) */
     dec_t dry;
     float d0, d1, dfrac, dg, dgt;           /* the dry voice: two decoded samples, where between, its own fade (loop passes) */
@@ -275,17 +276,17 @@ void g_shed(void)
 
 /* ------------------------------------------------------------------ notes --- */
 static void grain_off(grain_t *g);
-static void voice_strike(voice_t *v, int note, float vel)
+static void voice_strike(voice_t *v, int note, float m, float vel)
 {
     const gparams_t *p = &E.p;
     float bright;
-    v->note = (uint8_t)note; v->vel = vel; v->held = 1; v->on = 1; v->age = ++E.age;
-    v->e = (uint8_t)smp_nearest((float)note);
+    v->note = (uint16_t)note; v->m = m; v->vel = vel; v->held = 1; v->on = 1; v->age = ++E.age;
+    v->e = (uint8_t)smp_nearest(m);
     /* velocity: louder and brighter, as much as DYNAMICS says */
     v->amp = (1.0f - p->dyn) * 0.75f + p->dyn * (0.15f + 0.85f * vel * vel);
     bright = 1.0f - p->dyn * (1.0f - vel);
     v->va = 1.0f - fm_expf(-6.2831853f * exp_range(bright, 900.0f, 20000.0f) / SR);
-    v->pan = fm_clampf(((float)note - 66.0f) * (1.0f / 40.0f), -0.6f, 0.6f);
+    v->pan = fm_clampf((m - 66.0f) * (1.0f / 40.0f), -0.6f, 0.6f);
     dec_start(&v->dry, v->e);
     v->d0 = 0.0f; v->d1 = (float)dec_next(&v->dry); v->dfrac = 0.0f; v->dg = v->dgt = 1.0f; v->dry_on = 1;
     v->denv = 1.0f; v->genv = 1.0f; v->kf = 1.0f; v->kill = 0;
@@ -294,30 +295,30 @@ static void voice_strike(voice_t *v, int note, float vel)
 }
 
 /* a sounding voice taken for a note: it fades out first, and the note starts when it is silent (voice_tick) */
-static void voice_take(voice_t *v, int note, float vel)
+static void voice_take(voice_t *v, int note, float m, float vel)
 {
-    v->kill = 1; v->pnote = (uint8_t)note; v->pvel = vel; v->pheld = 1;
+    v->kill = 1; v->pnote = (uint16_t)note; v->pm = m; v->pvel = vel; v->pheld = 1;
 }
 
-static void note_on(int note, float vel)
+static void note_on(int note, float m, float vel)
 {
     int i, best = -1;
     uint32_t oldest = 0xFFFFFFFFu;
     if (!smp_n) return;
     for (i = 0; i < G_NV; i++)          /* the same note: struck again (or about to be) */
         if (E.v[i].on && ((E.v[i].kill && E.v[i].pnote == note) || (!E.v[i].kill && E.v[i].note == note))) {
-            voice_take(&E.v[i], note, vel);
+            voice_take(&E.v[i], note, m, vel);
             return;
         }
     for (i = 0; i < G_NV; i++)
-        if (!E.v[i].on) { E.v[i].aenv = 0.0f; E.v[i].ng = 0; voice_strike(&E.v[i], note, vel); return; }
+        if (!E.v[i].on) { E.v[i].aenv = 0.0f; E.v[i].ng = 0; voice_strike(&E.v[i], note, m, vel); return; }
     for (i = 0; i < G_NV; i++)          /* none free: the oldest released one, else the oldest */
         if (!E.v[i].kill && !E.v[i].held && E.v[i].age < oldest) { oldest = E.v[i].age; best = i; }
     if (best < 0)
         for (i = 0; i < G_NV; i++)
             if (!E.v[i].kill && E.v[i].age < oldest) { oldest = E.v[i].age; best = i; }
     if (best < 0) best = 0;
-    voice_take(&E.v[best], note, vel);
+    voice_take(&E.v[best], note, m, vel);
 }
 
 /* per chunk: a voice fading out for another note; silent, its grains go and the note begins */
@@ -331,7 +332,7 @@ static void voice_tick(voice_t *v)
         if (E.g[i].on && &E.v[E.g[i].v] == v) grain_off(&E.g[i]);
     v->ng = 0;
     v->aenv = 0.0f;
-    voice_strike(v, v->pnote, v->pvel);
+    voice_strike(v, v->pnote, v->pm, v->pvel);
     v->held = v->pheld;
 }
 
@@ -342,7 +343,7 @@ static void run_commands(void)
         cmd_t c = cq[cq_tail];
         cq_tail = (cq_tail + 1u) % QN;
         switch (c.t) {
-        case CMD_ON: note_on(c.note, c.vel); break;
+        case CMD_ON: note_on(c.note, c.pitch, c.vel); break;
         case CMD_OFF:
             for (i = 0; i < G_NV; i++) {
                 if (E.v[i].on && E.v[i].kill && E.v[i].pnote == c.note) E.v[i].pheld = 0;
@@ -597,7 +598,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 while (p->pos * (len - 1.0f) + v->scan >= len) v->scan -= span;
             }
             if (v->dry_on && (v->dgt < 0.002f || v->denv < 0.0005f)) v->dry_on = 0;
-            v->rate = fm_exp2f(((float)v->note - (float)smp_e[v->e].root) * (1.0f / 12.0f)) * smp_ratio * pmul;
+            v->rate = fm_exp2f((v->m - (float)smp_e[v->e].root) * (1.0f / 12.0f)) * smp_ratio * pmul;
             if (grg > 0.0f && v->genv > 0.002f && !v->kill) {
                 v->gnext -= (float)cn;
                 while (v->gnext <= 0.0f) {
@@ -791,7 +792,7 @@ int g_voice_pos(int v, uint8_t *note, uint8_t *pos)
     at = E.p.pos * (len - 1.0f) + x->scan;
     if (at < 0.0f) at = 0.0f;
     if (at >= len) at = len - 1.0f;
-    *note = x->note;
+    *note = (uint8_t)fm_clampf(x->m + 0.5f, 0.0f, 127.0f);
     *pos = (uint8_t)(at * 255.0f / len);
     return 1;
 }
