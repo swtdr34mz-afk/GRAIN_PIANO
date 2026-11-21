@@ -169,6 +169,7 @@ the loop sounds new at once.
 
 **Recording**
 1. On LOOP press **REC**. If the loop is not playing, a bar is counted in (REC blinks), then it records (REC lit).
+   A first note played a little early, in the count-in's last beat, lands on the loop's first beat.
 2. Play, and turn knobs: K1–K4 on any page and the macros SELECT / ALGORITHM are recorded too.
 3. The loop goes round and every pass adds to it (overdub). A knob already recorded, turned again, replaces its old moves.
 4. **REC** again: recording ends, the loop plays on.

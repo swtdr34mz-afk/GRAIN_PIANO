@@ -393,17 +393,18 @@ static struct {
 /* an event at t (ticks from the loop's start, may be past its end). Heard live as it was played: it is not played
  * again until the loop comes round, so when t is still ahead in this pass (a note moved forward to the grid), or at
  * the next pass's start, that pass skips it */
-static void seq_add(uint32_t t, int type, int id, float pitch, int v, int k)
+static sev_t *seq_add(uint32_t t, int type, int id, float pitch, int v, int k)
 {
     sev_t *e;
     uint32_t now = (uint32_t)S.pos;
-    if (S.n >= SEQ_MAXEV) return;       /* (full: no more) */
+    if (S.n >= SEQ_MAXEV) return 0;     /* (full: no more) */
     e = &sev[S.n++];
     e->type = (uint8_t)type; e->id = (uint16_t)id; e->pitch = pitch; e->v = (uint8_t)v; e->k = (uint8_t)k;
     e->skip = -1;
     if (t >= S.len) { t -= S.len; e->skip = (int16_t)(S.npass + 1); }   /* (into the next pass) */
     else if (t > now) e->skip = S.npass;   /* (later in this one) */
     e->t = t;
+    return e;
 }
 static uint32_t seq_now(void) { return (uint32_t)S.pos % S.len; }
 
@@ -411,7 +412,17 @@ static void seq_rec_on(int id, float pitch, float vel)
 {
     uint32_t t, tq;
     int i, slot = -1;
-    if (S.rec != 2 || (id & 0x8000)) return;
+    sev_t *e;
+    if (id & 0x8000) return;
+    if (S.rec == 1 && S.count <= (float)SEQ_PPQ) {   /* in the count-in's last beat: a note a little early is the
+                                                        * loop's first, on its first beat (its length kept) */
+        for (i = 0; i < 16; i++) if (!S.open[i].on) { slot = i; break; }
+        if (slot >= 0) { S.open[slot].on = 1; S.open[slot].id = (uint16_t)id; S.open[slot].off = (int32_t)S.count; }
+        e = seq_add(0, EV_ON, id, pitch, (int)(vel * 127.0f + 0.5f), 0);
+        if (e) e->skip = (int16_t)(S.npass + 1);   /* (heard now: not again as the loop begins) */
+        return;
+    }
+    if (S.rec != 2) return;
     t = seq_now(); tq = t;
     if (S.quant) tq = ((t + S.quant / 2u) / S.quant) * S.quant;   /* (may be the loop's end: the next start) */
     for (i = 0; i < 16; i++) if (!S.open[i].on) { slot = i; break; }
@@ -421,10 +432,14 @@ static void seq_rec_on(int id, float pitch, float vel)
 static void seq_rec_off(int id)
 {
     int i;
-    if (S.rec != 2 || (id & 0x8000)) return;
+    if (S.rec == 0 || (id & 0x8000)) return;
     for (i = 0; i < 16; i++)
         if (S.open[i].on && S.open[i].id == id) {
             int32_t t = (int32_t)seq_now() + S.open[i].off;
+            if (S.rec == 1) {           /* let go still in the count-in: a short note on the first beat */
+                t = S.open[i].off - (int32_t)S.count;
+                if (t < 1) t = 1;
+            }
             while (t < 0) t += (int32_t)S.len;
             seq_add((uint32_t)t, EV_OFF, id, 0.0f, 0, 0);
             S.open[i].on = 0;
@@ -532,8 +547,8 @@ static void seq_chunk(uint32_t cn, float bpm)
     }
     if (S.rec == 1) {                   /* the count-in: the loop waits */
         S.count -= adv;
-        if (S.count <= 0.0f) { S.rec = 2; S.pos = 0.0f; S.npass++; seq_fire(0.0f, 1.0f); }
-        return;
+        if (S.count > 0.0f) return;
+        S.rec = 2; S.pos = 0.0f; S.npass++;   /* the loop begins: this chunk plays its start (below) */
     }
     {
         float p0 = S.pos, p1 = p0 + adv, len = (float)S.len;

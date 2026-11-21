@@ -1,0 +1,25 @@
+# the first note a little early, in the count-in's last beat: it lands on the loop's first beat
+wait 600
+tap SEQ
+wait 30
+expect page 11
+spin K1 -1
+wait 20
+spin K1 -1
+wait 20
+tap REC
+wait 1950
+expect seq_rec 1
+key w4 down 90
+wait 300
+key w4 up
+wait 200
+expect seq_rec 2
+expect seq_notes 1
+expect ev0 0
+wait 1000
+tap REC
+wait 50
+expect seq_fired 0
+wait 1500
+expect seq_fired 1

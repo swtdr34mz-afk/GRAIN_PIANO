@@ -175,7 +175,8 @@ Alles spielt live durch GRAIN PIANO. Nach der Aufnahme kannst du also Preset, Ma
 
 **Aufnehmen**
 1. Auf der Seite LOOP **REC** drücken. Läuft der Loop noch nicht, kommt ein Takt Einzähler (REC blinkt), dann
-   beginnt die Aufnahme (REC leuchtet).
+   beginnt die Aufnahme (REC leuchtet). Spielst du deinen ersten Ton etwas zu früh, im letzten Schlag des
+   Einzählers, landet er genau auf dem ersten Schlag des Loops.
 2. Spielen und an den Reglern drehen: K1–K4 auf jeder Seite und die Makros SELECT / ALGORITHM werden mit aufgenommen.
 3. Der Loop läuft im Kreis, und jede Runde kommt Neues dazu (Overdub). Drehst du einen Regler, den du schon
    aufgenommen hattest, ersetzt die neue Bewegung die alte.
