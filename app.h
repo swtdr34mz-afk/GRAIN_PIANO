@@ -7,8 +7,9 @@
 #include "plat.h"
 
 #define APP_NAME "GRAIN PIANO"
-#define APP_SPLASH_RGB RGB(244, 214, 160)
+#define APP_SPLASH_RGB RGB(236, 186, 98)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
+#define APP_SPLASH                       /* app_splash: the title on black at power-on */
 #define APP_OVERLOAD                     /* app_overload: the render over 90 % of its time */
 #define APP_TOUCH                        /* velocity from the keys (lib/touch.h) */
 
@@ -37,6 +38,7 @@ void app_frame(void);
 void app_input_only(void);
 void app_say(const char *a, const char *b);
 void app_overload(void);
+void app_splash(void);
 
 #define APP_HOST_EXPECT
 int app_expect(const char *what, int *got);

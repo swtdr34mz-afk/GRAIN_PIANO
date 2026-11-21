@@ -504,6 +504,8 @@ static struct {
     uint32_t clk_n, clk_t0, clk_last;    /* an outside MIDI clock: ticks counted, when the count began, the last tick */
     uint8_t ext;                         /* its tempo is followed */
     uint32_t mem_t;                      /* when MEMORY was asked on */
+    uint8_t intro;                       /* the splash is running */
+    uint32_t intro_t0;
 } ui;
 
 static void text_cat(char *d, const char *s)
@@ -930,11 +932,100 @@ static void draw(uint32_t now)
     draw_keys();
 }
 
+/* ------------------------------------------------------------------ the splash --- */
+/* "Grain" over "Piano" in a fraktur (UnifrakturMaguntia, tools/gen_title.py), shimmering gold on black: a highlight
+ * sweeps across it, the gold breathes; then it breaks, left to right, into grains the wind takes to the right, and
+ * they glow out. "by swtdr34mz" small under it. About 4.5 s at the start (a key or a button skips it). */
+#include "title_data.h"
+#define INTRO_SHIM 2200u                 /* ms: the shimmer, then the breaking, then the end */
+#define INTRO_DIS 1800u
+#define INTRO_END 500u
+#define INTRO_Y 40                       /* the title's canvas, on the screen */
+static uint16_t gold_lut[256];
+
+static void gold_init(void)              /* dark bronze .. gold .. pale light gold */
+{
+    static const uint8_t G[5][3] = {{70, 44, 10}, {150, 100, 30}, {214, 160, 60}, {246, 206, 110}, {255, 240, 190}};
+    uint32_t i;
+    for (i = 0; i < 256u; i++) {
+        uint32_t t = i * 4u, k = t / 256u, f = t % 256u, c[3], j;
+        if (k > 3u) { k = 3u; f = 255u; }
+        for (j = 0; j < 3u; j++) c[j] = (G[k][j] * (256u - f) + G[k + 1u][j] * f) / 256u;
+        gold_lut[i] = RGB(c[0], c[1], c[2]);
+    }
+}
+static uint16_t dim565(uint16_t c, uint32_t a)   /* c at a / 256 */
+{
+    uint32_t r = (c >> 11) * a >> 8, g = ((c >> 5) & 63u) * a >> 8, b = (c & 31u) * a >> 8;
+    return (uint16_t)(r << 11 | g << 5 | b);
+}
+
+static void title_draw(uint32_t t)
+{
+    int32_t yt = (240 - TITLE_H) / 2 - 12 - INTRO_Y, x, y, band, front;
+    int32_t fade = t >= 500u ? 256 : (int32_t)(t * 256u / 500u);
+    int16_t breath[240];
+    uint32_t i, by;
+    cv_begin(240, 144, C_BLACK);
+    band = -60 + (int32_t)(t * 360u / INTRO_SHIM);
+    front = t > INTRO_SHIM ? (int32_t)((t - INTRO_SHIM) * 300u / INTRO_DIS) - 30 : -999;
+    for (x = 0; x < 240; x++)
+        breath[x] = (int16_t)(20.0f * fm_sinf((float)t * 0.003f + (float)x * 0.05f));
+    if (t < INTRO_SHIM + INTRO_DIS) {
+        for (y = 0; y < TITLE_H; y++) {
+            int32_t base = 140 + 64 * (TITLE_H - y) / TITLE_H;
+            for (x = front < 0 ? 0 : front; x < 240; x++) {
+                uint32_t q = (uint32_t)(y * TITLE_W + x), a = (title_alpha[q >> 1] >> ((q & 1u) << 2)) & 15u;
+                int32_t g, d;
+                if (!a) continue;
+                d = (x * 10 + y * 6) / 10 - band;
+                if (d < 0) d = -d;
+                g = base + breath[x] + (d < 22 ? (22 - d) * 140 / 22 : 0);
+                g = g * fade >> 8;
+                if (g > 255) g = 255;
+                cv_pset(x, yt + y, dim565(gold_lut[g], a * 17u + 1u));
+            }
+        }
+        if (t > INTRO_SHIM)             /* the grains, blown right as the front passes them */
+            for (i = 0; i < TITLE_NG; i++) {
+                uint32_t t0 = INTRO_SHIM + ((uint32_t)title_gx[i] + 30u) * INTRO_DIS / 300u;
+                float u, sp, life, px, py;
+                if (t < t0) continue;
+                u = (float)(t - t0) * 0.001f;
+                life = 1.0f - u / (0.9f + 0.8f * (float)title_gl[i] * (1.0f / 255.0f));
+                if (life <= 0.0f) continue;
+                sp = 0.6f + 1.8f * (float)title_gs[i] * (1.0f / 255.0f);
+                px = (float)title_gx[i] + sp * 60.0f * u + 40.0f * u * u * sp;
+                py = (float)title_gy[i] + (float)title_gd[i] * (0.35f / 128.0f) * 40.0f * u - 6.0f * u * u;
+                {
+                    uint16_t c = dim565(gold_lut[(uint32_t)(153.0f + 102.0f * life)], (uint32_t)(life * 256.0f));
+                    cv_pset((int32_t)px, yt + (int32_t)py, c);
+                    if (title_gl[i] > 153u) cv_pset((int32_t)px + 1, yt + (int32_t)py, c);
+                }
+            }
+    }
+    cv_blit(0, INTRO_Y);
+    /* by swtdr34mz, fading in, and out at the end */
+    by = t < 800u ? t * 256u / 800u : t < INTRO_SHIM + INTRO_DIS ? 256u :
+         t < INTRO_SHIM + INTRO_DIS + INTRO_END ? 256u - (t - INTRO_SHIM - INTRO_DIS) * 256u / INTRO_END : 0u;
+    cv_begin(240, 20, C_BLACK);
+    cv_text((240 - text_w(&FONT_XS, "by swtdr34mz")) / 2, 2, &FONT_XS, "by swtdr34mz", dim565(gold_lut[120], by));
+    cv_blit(0, 206);
+}
+
+void app_splash(void)                    /* at power-on, while the FM-1 starts: the title, still */
+{
+    gold_init();
+    lcd_fill(0, 0, 240, 240, C_BLACK);
+    title_draw(900u);
+}
+
 void app_ui_init(void)
 {
     touch_on(1);
-    lcd_fill(0, 0, 240, 240, C_BLACK);
+    gold_init();
     ui.page = PG_MAIN;
+    ui.intro = 1;                        /* the splash runs first (app_frame) */
     ui.redraw = 1;
 }
 
@@ -963,6 +1054,17 @@ void app_frame(void)
     if (ui.mem && !g_memory_on() && now - ui.mem_t > 300u) { ui.mem = 0; ui.redraw = 1; }   /* (nothing played yet) */
     ann_tick(now);
     if (ui.msg_until && now >= ui.msg_until) { ui.msg_until = 0; ui.redraw = 1; }
+    if (ui.intro) {                      /* the splash: to its end, or until a key or a button */
+        if (!ui.intro_t0) ui.intro_t0 = now ? now : 1u;
+        if (now - ui.intro_t0 >= INTRO_SHIM + INTRO_DIS + INTRO_END || ui.keys || ui.btn) {
+            ui.intro = 0;
+            lcd_fill(0, 0, 240, 240, C_BLACK);
+            ui.redraw = 1;
+        } else {
+            if (now - ui.t_draw >= 30u) { ui.t_draw = now; title_draw(now - ui.intro_t0); }
+            return;
+        }
+    }
     /* the cloud moves while anything sounds: about 30 pictures a second; else only on a change */
     if (ui.redraw || ((g_level() > 0.0002f || hd.n) && now - ui.t_draw >= 33u)) {
         ui.redraw = 0;
@@ -981,6 +1083,7 @@ int app_expect(const char *what, int *got)
     else if (!strncmp(what, "cents", 5) && what[5] >= '0' && what[5] <= '7')   /* cents0..7: a held note's pitch x 100 */
         *got = what[5] - '0' < hd.n ? (int)(hd.pitch[what[5] - '0'] * 100.0f + 0.5f) : -1;
     else if (!strcmp(what, "scale")) *got = SC;
+    else if (!strcmp(what, "intro")) *got = ui.intro;
     else if (!strcmp(what, "memory")) *got = g_memory_on();
     else if (!strcmp(what, "ext")) *got = ui.ext;
     else if (!strcmp(what, "page")) *got = ui.page;
