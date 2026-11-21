@@ -11,11 +11,13 @@
 
 #define G_SR 44100.0f
 #define G_NV 8                          /* voices (notes at once) */
-#define G_NREV 6                        /* grains played backwards at once (each a RAM buffer) */
+#define G_NREV 5                        /* grains played backwards at once (each a RAM buffer) */
 #define G_NG 24                         /* grains at once at most, shared by the voices (CLOUD at 16: 63 % CPU) */
 
 enum { LFO_POS, LFO_PITCH, LFO_FILTER, LFO_PAN, NLFO_TARGET };
 enum { HALO_OFF, HALO_OCT, HALO_FIFTH, HALO_OCT5, HALO_MAJ, HALO_MIN, HALO_SUS, HALO_MAJ9, NHALO };
+enum { PRESS_OFF, PRESS_DENSITY, PRESS_POSITION, PRESS_VIBRATO, PRESS_SWELL, NPRESS };
+enum { PULSE_OFF, PULSE_4, PULSE_8, PULSE_8T, PULSE_16, PULSE_32, NPULSE };
 enum { TEX_OFF, TEX_RAIN, TEX_VINYL, TEX_TAPE, TEX_WIND, TEX_SEA, TEX_ROOM, NTEX };
 
 typedef struct {                        /* every value 0..1, but ltarget (LFO_*) */
@@ -27,7 +29,10 @@ typedef struct {                        /* every value 0..1, but ltarget (LFO_*)
     float rev, hamt, width;             /* MAGIC: the share of grains played backwards, of grains in the HALO's
                                          * intervals, the grains' stereo width */
     float tlev, tchar, treact;          /* TEXTURE: level, character (light .. heavy), how much it follows the playing */
-    uint8_t ltarget, halo, tex;         /* LFO_*, HALO_*, TEX_* */
+    float pamt, mlev, mscan;            /* MAGIC 2: what the keys' pressure does, how much; MEMORY's level, how fast its
+                                         * cloud wanders through the phrase */
+    float bpm, swing, pump;             /* PULSE: tempo (an outside MIDI clock wins: g_tempo), swing, the pumping */
+    uint8_t ltarget, halo, tex, press, pulse;   /* LFO_*, HALO_*, TEX_*, PRESS_*, PULSE_* */
 } gparams_t;
 
 void g_init(void);
@@ -38,6 +43,10 @@ void g_params(const gparams_t *p);
  * too (the scales between the piano's keys), velocity 0..1 */
 void g_note_on(int id, float pitch, float vel);
 void g_note_off(int id);
+void g_press(int id, float p);          /* a key's pressure, 0..1 (PRESS_*) */
+void g_tempo(float bpm);                /* an outside MIDI clock's tempo; 0: none (PULSE plays at its own BPM) */
+void g_memory(int on);                  /* MEMORY: 1 the last seconds played, frozen into a cloud of their own; 0 it fades */
+int g_memory_on(void);
 void g_all_off(void);                   /* every note released (they fade) */
 void g_panic(void);                     /* silence now */
 void g_render(int32_t *lr, uint32_t n, float gain);

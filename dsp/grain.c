@@ -19,9 +19,11 @@
 #define CK_MAX 2560u                    /* the nine notes (25 s at 22,050 Hz) take about 2,130 */
 #define MS_MAX 512u                     /* blocks in one note at most (the longest: 3.4 s, 293) */
 #define RV_MAXL 4600u                   /* the reverb's lines at their longest (room size 1) */
-#define DL_N 24000u                     /* the ping-pong delay, per side: 0.54 s */
-#define DL_L 15876u                     /* its left time (0.36 s) and right (0.54 s) */
-#define DL_R 23800u
+#define DL_N 18000u                     /* the ping-pong delay, per side: 0.41 s (MEMORY took the rest) */
+#define DL_L 12000u                     /* its left time (0.27 s) and right (0.4 s) */
+#define DL_R 17640u
+#define MEM_N 48000u                    /* MEMORY: the last 2.2 s played, at 22,050 Hz, 8 bits (square-law) */
+#define G_NM 6                          /* MEMORY's grains at once */
 
 static void zero(void *d, uint32_t n) { uint8_t *p = (uint8_t *)d; while (n--) *p++ = 0; }
 static void copy(void *d, const void *s, uint32_t n)
@@ -38,6 +40,7 @@ static float rv_line[4][RV_MAXL] PLAT_POOL;
 static int16_t dl_buf[2][DL_N] PLAT_POOL;
 #define RB_N 4096u                      /* a backwards grain's buffer: 186 ms of the sample */
 static int16_t rbuf[G_NREV][RB_N] PLAT_POOL;
+static int8_t mem_buf[MEM_N] PLAT_POOL;
 
 /* ------------------------------------------------------------------ the samples --- */
 typedef struct { uint8_t root, sidx, lidx, pad; int16_t spred, lpred; uint32_t off, len, loop; } smp_ent_t;
@@ -164,7 +167,7 @@ static int smp_nearest(float m)
 }
 
 /* ------------------------------------------------------------------ the command queue (main loop -> render) --- */
-enum { CMD_ON, CMD_OFF, CMD_ALLOFF, CMD_PANIC };
+enum { CMD_ON, CMD_OFF, CMD_ALLOFF, CMD_PANIC, CMD_PRESS, CMD_TEMPO, CMD_MEM };
 typedef struct { uint8_t t; uint16_t note; float pitch, vel; } cmd_t;
 #define QN 64u
 static cmd_t cq[QN];
@@ -183,6 +186,9 @@ static void push(uint8_t t, int note, float pitch, float vel)
 void g_note_on(int id, float pitch, float vel) { push(CMD_ON, id, fm_clampf(pitch, 12.0f, 120.0f), vel); }
 void g_note_off(int id) { push(CMD_OFF, id, 0.0f, 0.0f); }
 void g_all_off(void) { push(CMD_ALLOFF, 0, 0.0f, 0.0f); }
+void g_press(int id, float p) { push(CMD_PRESS, id, 0.0f, p); }
+void g_tempo(float bpm) { push(CMD_TEMPO, 0, bpm, 0.0f); }
+void g_memory(int on) { push(CMD_MEM, on != 0, 0.0f, 0.0f); }
 void g_panic(void) { push(CMD_PANIC, 0, 0.0f, 0.0f); }
 void g_params(const gparams_t *p)       /* into the buffer the render does not read, then swapped */
 {
@@ -198,6 +204,7 @@ typedef struct {
     uint8_t kill, pheld;                /* taken for another note: it fades out in ~3 ms first (no click), then pnote */
     uint16_t note, pnote;               /* the note's id, the next one's */
     float m, pm, pvel, kf;              /* the pitch (MIDI, fractions too), the next note's pitch and velocity; the fade */
+    float press, ptarget, sw;           /* the key's pressure (gliding to ptarget), SWELL's gain from it this chunk */
     float vel, amp, pan, rate;          /* rate: the step through its sample for its pitch (per chunk, with the wobble) */
     dec_t dry;
     float d0, d1, dfrac, dg, dgt;           /* the dry voice: two decoded samples, where between, its own fade (loop passes) */
@@ -237,6 +244,14 @@ static struct {
     float tx_lp[4], tx_vl[2], tx_hp[2], tx_svl[2], tx_svb[2], tx_ph, tx_ph2, tx_walk, tx_gust, tx_env[2];
     float dr_y1[4], dr_y2[4], dr_a1[4], dr_a2[4], dr_pl[4], dr_pr[4];   /* rain drops: four resonators */
     uint8_t dr_next;
+    /* PULSE, the pressure's vibrato */
+    float ext_bpm, pul_left, pump, vib_ph;
+    uint32_t pul_n;
+    /* MEMORY */
+    uint32_t mem_w, mem_fill;           /* where it writes, how much it holds */
+    float mem_acc, mem_g, mem_gt, mem_pos, mem_next;
+    uint8_t mem_odd, mem_frozen, mem_on;
+    struct { uint8_t on; float pos, step, ph, inc, pl, pr, gl, gr; } mg[G_NM];
 } E;
 static const float RV_BASE[4] = {1559.0f, 1907.0f, 2341.0f, 2789.0f};
 
@@ -290,6 +305,7 @@ static void voice_strike(voice_t *v, int note, float m, float vel)
     dec_start(&v->dry, v->e);
     v->d0 = 0.0f; v->d1 = (float)dec_next(&v->dry); v->dfrac = 0.0f; v->dg = v->dgt = 1.0f; v->dry_on = 1;
     v->denv = 1.0f; v->genv = 1.0f; v->kf = 1.0f; v->kill = 0;
+    v->press = v->ptarget = 0.0f; v->sw = 1.0f;
     v->scan = 0.0f;
     v->gnext = 0.0f;
 }
@@ -350,6 +366,17 @@ static void run_commands(void)
                 else if (E.v[i].on && E.v[i].note == c.note) E.v[i].held = 0;
             }
             break;
+        case CMD_PRESS:
+            for (i = 0; i < G_NV; i++)
+                if (E.v[i].on && !E.v[i].kill && E.v[i].note == c.note) E.v[i].ptarget = fm_clampf(c.vel, 0.0f, 1.0f);
+            break;
+        case CMD_TEMPO: E.ext_bpm = c.pitch; break;
+        case CMD_MEM:
+            if (c.note && E.mem_fill > 4410u) {   /* (at least 0.2 s played) */
+                E.mem_frozen = 1; E.mem_on = 1; E.mem_gt = 1.0f;
+                E.mem_pos = 0.0f; E.mem_next = 0.0f;
+            } else E.mem_gt = 0.0f;
+            break;
         case CMD_ALLOFF:
             for (i = 0; i < G_NV; i++) { E.v[i].held = 0; E.v[i].pheld = 0; }
             break;
@@ -357,6 +384,8 @@ static void run_commands(void)
             for (i = 0; i < G_NV; i++) { E.v[i].on = 0; E.v[i].ng = 0; }
             for (i = 0; i < G_NG; i++) E.g[i].on = 0;
             E.rb_busy = 0;
+            E.mem_on = 0; E.mem_frozen = 0; E.mem_g = E.mem_gt = 0.0f;
+            for (i = 0; i < G_NM; i++) E.mg[i].on = 0;
             zero(rv_line, sizeof rv_line);
             zero(dl_buf, sizeof dl_buf);
             break;
@@ -382,6 +411,7 @@ static void spawn(int vi, float lfo, float size_s, float gnorm)
     if (!g) return;                     /* all busy: this one is skipped */
     at = p->pos * (len - 1.0f) + v->scan;
     if (p->ltarget == LFO_POS) at += lfo * p->ldepth * 0.35f * len;
+    if (p->press == PRESS_POSITION) at += v->press * p->pamt * 0.5f * len;
     at += rnd() * (0.004f + 0.5f * sp2) * len;
     if (at < 0.0f) at = -at;
     while (at >= len) at -= (len - loop);   /* past the end: into the loop at the tail */
@@ -565,8 +595,57 @@ void g_render(int32_t *lr, uint32_t n, float gain)
         float felt_atk, rsc, t60, lpan = 0.0f, send_d, fb_d, wet, rv_dd[4];
         uint8_t live[G_NG];
         int ng_live = 0, j;
-        float act = 0.0f, txg;
+        float act = 0.0f, txg, pumpg = 1.0f;
+        int tick = 0, mem_rec = !E.mem_frozen;
         E.rev_born = 0;
+        E.vib_ph += (float)cn * 5.5f / SR; if (E.vib_ph >= 1.0f) E.vib_ph -= 1.0f;
+        if (p->pulse != PULSE_OFF && p->pulse < NPULSE) {   /* PULSE: the beat (an outside clock's tempo wins) */
+            static const float DIV[NPULSE] = {1.0f, 1.0f, 0.5f, 1.0f / 3.0f, 0.25f, 0.125f};
+            float bpm = E.ext_bpm > 20.0f ? E.ext_bpm : p->bpm, per = SR * 60.0f / fm_maxf(bpm, 20.0f) * DIV[p->pulse];
+            E.pul_left -= (float)cn;
+            if (E.pul_left <= 0.0f) {
+                tick = 1;
+                E.pul_n++;
+                E.pul_left += per * (E.pul_n & 1u ? 1.0f + 0.33f * p->swing : 1.0f - 0.33f * p->swing);
+                if (E.pul_left < 0.0f) E.pul_left = per;
+                E.pump = 1.0f;
+            }
+            E.pump *= chunk_coef(per * 0.22f / SR);
+            pumpg = 1.0f - p->pump * 0.85f * E.pump;
+        } else E.pump = 0.0f;
+        if (E.mem_on) {                 /* MEMORY: its fade, its wandering, its grains' births */
+            float sp = fm_clampf(p->size * 0.6f + 0.15f, 0.1f, 1.0f), msz = exp_range(sp, 0.02f, 0.5f);
+            float mint = SR / (6.0f + 30.0f * p->dens), span = (float)(E.mem_fill > 2u ? E.mem_fill - 2u : 1u);
+            E.mem_g += (E.mem_gt - E.mem_g) * (E.mem_gt > E.mem_g ? 0.01f : 0.004f);
+            if (E.mem_gt <= 0.0f && E.mem_g < 0.001f) { E.mem_on = 0; E.mem_frozen = 0; E.mem_fill = 0; }
+            E.mem_pos += (float)cn * 0.5f * p->mscan * p->mscan;
+            if (E.mem_pos >= span) E.mem_pos -= span;
+            E.mem_next -= (float)cn;
+            while (E.mem_next <= 0.0f && E.mem_on) {
+                int f = -1;
+                for (j = 0; j < G_NM; j++) if (!E.mg[j].on) { f = j; break; }
+                E.mem_next += mint * (1.0f + 0.5f * rnd());
+                if (f >= 0) {
+                    float at = E.mem_pos + rnd() * (0.02f + 0.4f * p->spray * p->spray) * span, semis = 0.0f, pan;
+                    while (at < 0.0f) at += span;
+                    while (at >= span) at -= span;
+                    if (p->halo != HALO_OFF && p->halo < NHALO && rndu() < p->hamt) semis = rndu() < 0.5f ? 12.0f : 7.0f;
+                    E.mg[f].pos = (float)((E.mem_w + MEM_N - E.mem_fill) % MEM_N) + at;
+                    if (E.mg[f].pos >= (float)MEM_N) E.mg[f].pos -= (float)MEM_N;
+                    E.mg[f].step = 0.5f * fm_exp2f(semis * (1.0f / 12.0f));
+                    E.mg[f].ph = 0.0f;
+                    E.mg[f].inc = 1.0f / (msz * SR);
+                    pan = rnd() * (0.3f + 0.6f * p->width);
+                    E.mg[f].pr = fm_sqrtf(0.5f * (1.0f + pan));
+                    E.mg[f].pl = fm_sqrtf(0.5f * (1.0f - pan));
+                    E.mg[f].on = 1;
+                }
+            }
+            {                           /* each grain's level this chunk: MEMORY's level, its fade */
+                float g = p->mlev * p->mlev * 2.2f * E.mem_g;
+                for (j = 0; j < G_NM; j++) { E.mg[j].gl = E.mg[j].pl * g; E.mg[j].gr = E.mg[j].pr * g; }
+            }
+        }
         /* ---- per chunk: the LFO, the wobble, the filters, the envelopes, the grains' births */
         E.lfo_ph += (float)cn * exp_range(p->lrate, 0.05f, 8.0f) / SR;
         if (E.lfo_ph >= 1.0f) E.lfo_ph -= 1.0f;
@@ -606,13 +685,24 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 while (p->pos * (len - 1.0f) + v->scan >= len) v->scan -= span;
             }
             if (v->dry_on && (v->dgt < 0.002f || v->denv < 0.0005f)) v->dry_on = 0;
+            v->press += (v->ptarget - v->press) * 0.15f;
+            v->sw = p->press == PRESS_SWELL ? 1.0f + 1.5f * v->press * p->pamt : 1.0f;
             v->rate = fm_exp2f((v->m - (float)smp_e[v->e].root) * (1.0f / 12.0f)) * smp_ratio * pmul;
+            if (p->press == PRESS_VIBRATO && v->press > 0.001f)   /* up to 40 cents, at 5.5 Hz */
+                v->rate *= fm_exp2f(fm_sin_turns(E.vib_ph) * v->press * p->pamt * (40.0f / 1200.0f));
             if (grg > 0.0f && v->genv > 0.002f && !v->kill) {
-                v->gnext -= (float)cn;
-                while (v->gnext <= 0.0f) {
-                    spawn(i, lfo, size_s, gnorm);
-                    v->gnext += interval * (1.0f + (0.15f + 0.8f * p->spray) * rnd());
-                    if (v->gnext < 8.0f) v->gnext = 8.0f;
+                if (tick) {                 /* PULSE: a burst of grains on the beat */
+                    int b, nb = 2 + (int)(p->dens * 5.0f);
+                    for (b = 0; b < nb; b++) spawn(i, lfo, size_s, gnorm);
+                } else if (p->pulse == PULSE_OFF) {
+                    float iv = interval;
+                    if (p->press == PRESS_DENSITY) iv /= 1.0f + 3.0f * v->press * p->pamt;
+                    v->gnext -= (float)cn;
+                    while (v->gnext <= 0.0f) {
+                        spawn(i, lfo, size_s, gnorm);
+                        v->gnext += iv * (1.0f + (0.15f + 0.8f * p->spray) * rnd());
+                        if (v->gnext < 8.0f) v->gnext = 8.0f;
+                    }
                 }
             }
             /* done: let go, the piano silent, no grain left and none to come. A held voice stays (silent, it
@@ -626,7 +716,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
             if (E.g[i].on) {
                 grain_t *g = &E.g[i];
                 const voice_t *v = &E.v[g->v];
-                float k = g->amp * v->genv * v->aenv * v->amp * v->kf * grg * (1.0f / 32768.0f);
+                float k = g->amp * v->genv * v->aenv * v->amp * v->kf * v->sw * grg * (1.0f / 32768.0f);
                 g->step = v->rate * g->rmul;
                 g->gl = k * g->pl;
                 g->gr = k * g->pr;
@@ -668,7 +758,7 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 v->dg += (v->dgt - v->dg) * 0.0005f;   /* (gliding there: a step would tick) */
                 o = (v->d0 + (v->d1 - v->d0) * v->dfrac) * (1.0f / 32768.0f);
                 v->vlp += v->va * (o - v->vlp);
-                gv = v->vlp * v->dg * v->denv * v->aenv * v->amp * v->kf * dryg;
+                gv = v->vlp * v->dg * v->denv * v->aenv * v->amp * v->kf * v->sw * dryg;
                 L += gv * (0.7f - 0.4f * v->pan);
                 R += gv * (0.7f + 0.4f * v->pan);
             }
@@ -695,6 +785,35 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 L += o * g->gl;
                 R += o * g->gr;
             }
+            if (mem_rec) {              /* MEMORY listens: the piano and its grains, at half the rate */
+                E.mem_acc += L + R;
+                if (E.mem_odd ^= 1u) {} else {
+                    float x = fm_clampf(E.mem_acc * 0.5f, -1.0f, 1.0f), a = fm_sqrtf(fm_fabsf(x)) * 127.0f;
+                    mem_buf[E.mem_w] = (int8_t)(x < 0.0f ? -a : a);
+                    if (++E.mem_w >= MEM_N) E.mem_w = 0u;
+                    if (E.mem_fill < MEM_N) E.mem_fill++;
+                    E.mem_acc = 0.0f;
+                }
+            }
+            if (E.mem_on) {             /* MEMORY's cloud */
+                for (j = 0; j < G_NM; j++) {
+                    float o, fr, a, b;
+                    int32_t i0;
+                    if (!E.mg[j].on) continue;
+                    E.mg[j].ph += E.mg[j].inc;
+                    if (E.mg[j].ph >= 1.0f) { E.mg[j].on = 0; continue; }
+                    E.mg[j].pos += E.mg[j].step;
+                    if (E.mg[j].pos >= (float)MEM_N) E.mg[j].pos -= (float)MEM_N;
+                    i0 = (int32_t)E.mg[j].pos;
+                    fr = E.mg[j].pos - (float)i0;
+                    a = (float)mem_buf[i0] * (1.0f / 127.0f); a = a * fm_fabsf(a);
+                    b = (float)mem_buf[i0 + 1u >= MEM_N ? 0 : i0 + 1] * (1.0f / 127.0f); b = b * fm_fabsf(b);
+                    o = (a + (b - a) * fr) * window(E.mg[j].ph);
+                    L += o * E.mg[j].gl;
+                    R += o * E.mg[j].gr;
+                }
+            }
+            if (pumpg < 1.0f) { L *= pumpg; R *= pumpg; }
             if (lpan != 0.0f) { float l = L, r = R; L = l * (1.0f - lpan * 0.8f); R = r * (1.0f + lpan * 0.8f); }
             /* the tone */
             E.tlpl += E.ta * (L - E.tlpl);
@@ -789,6 +908,8 @@ int g_grains(uint8_t *pos, uint8_t *lvl, uint8_t *voice, int max)
     for (i = 0; i < m; i++) { pos[i] = disp_pos[i]; lvl[i] = disp_lvl[i]; voice[i] = disp_v[i]; }
     return m;
 }
+
+int g_memory_on(void) { return E.mem_on; }
 
 int g_voice_pos(int v, uint8_t *note, uint8_t *pos)
 {

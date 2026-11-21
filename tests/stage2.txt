@@ -1,0 +1,59 @@
+# MEMORY (REC), PULSE (SEQ twice), the outside clock
+wait 600
+spin PRESET 1
+wait 20
+spin PRESET 1
+wait 20
+expect preset 2
+# a phrase, then REC: it is frozen into a cloud that goes on with no key down
+key w4 down 90
+wait 300
+key w4 up
+key w6 down 90
+wait 300
+key w6 up
+key w8 down 90
+wait 400
+key w8 up
+tap REC
+wait 50
+expect memory 1
+wait 9000
+wav memory.wav
+wait 3000
+wavstop
+expect memory 1
+shot memory.png
+tap REC
+wait 4000
+expect memory 0
+# PULSE: SEQ twice, 1/8 at 120 BPM, a held chord in bursts
+tap SEQ
+wait 30
+tap SEQ
+wait 30
+expect page 10
+spin K1 1
+wait 20
+spin K1 1
+wait 20
+expect k_PULSE 2
+spin K4 30
+wait 20
+shot pulse.png
+tap PLAY
+wait 30
+key w0 down 90
+key w4 down 90
+wait 100
+key w0 up
+key w4 up
+wait 1000
+wav pulse.wav
+wait 4000
+wavstop
+# an outside clock: its tempo is followed (EXT), and let go when it stops
+clock 60 21
+expect ext 1
+wait 1500
+expect ext 0
