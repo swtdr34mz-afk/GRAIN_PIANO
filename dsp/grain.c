@@ -22,7 +22,7 @@
 #define DL_N 18000u                     /* the ping-pong delay, per side: 0.41 s (MEMORY took the rest) */
 #define DL_L 12000u                     /* its left time (0.27 s) and right (0.4 s) */
 #define DL_R 17640u
-#define MEM_N 48000u                    /* MEMORY: the last 2.2 s played, at 22,050 Hz, 8 bits (square-law) */
+#define MEM_N 48000u                    /* MEMORY: the last 2.2 s played, at 22,050 Hz, 8 bits (mu-law) */
 #define G_NM 6                          /* MEMORY's grains at once */
 
 static void zero(void *d, uint32_t n) { uint8_t *p = (uint8_t *)d; while (n--) *p++ = 0; }
@@ -41,6 +41,39 @@ static int16_t dl_buf[2][DL_N] PLAT_POOL;
 #define RB_N 4096u                      /* a backwards grain's buffer: 186 ms of the sample */
 static int16_t rbuf[G_NREV][RB_N] PLAT_POOL;
 static int8_t mem_buf[MEM_N] PLAT_POOL;
+/* -1..1 into 8 bits: mu-law (mu 255), rounded: about 37 dB clean from loud down to -30 dB (the square-law before:
+ * 27 dB at -20 dB, a hiss and crunch on the cloud's quiet grains) */
+static float mem_tab[256];              /* the decoder: code + 128 -> the sample */
+static uint8_t mem_sq[128];             /* a code's loudness as the square-law's code was (the blocks' loudness) */
+static int8_t mem_enc(float x)
+{
+    float a = fm_clampf(fm_fabsf(x), 0.0f, 1.0f);
+    int32_t q = (int32_t)(fm_log2f(1.0f + 255.0f * a) * (127.0f / 8.0f) + 0.5f);
+    if (q > 127) q = 127;
+    return (int8_t)(x < 0.0f ? -q : q);
+}
+#define mem_dec(q) mem_tab[(uint8_t)((int32_t)(q) + 128)]
+static void mem_tab_init(void)
+{
+    int32_t i;
+    for (i = -128; i < 128; i++) {
+        int32_t q = i < -127 ? -127 : i;
+        float a = (fm_exp2f((float)(q < 0 ? -q : q) * (8.0f / 127.0f)) - 1.0f) * (1.0f / 255.0f);
+        mem_tab[i + 128] = q < 0 ? -a : a;
+        if (i >= 0) mem_sq[i] = (uint8_t)(fm_sqrtf(a) * 127.0f);
+    }
+}
+/* down to 22,050 Hz: a half-band of 15 taps first (stop band -32 dB), so the highs do not fold into the memory */
+static float mem_h[16];
+static uint32_t mem_hw;
+static inline float mem_half_band(void)
+{
+    uint32_t w = mem_hw;
+    return 0.5f * mem_h[(w - 8u) & 15u] + 0.313926f * (mem_h[(w - 7u) & 15u] + mem_h[(w - 9u) & 15u])
+           - 0.093404f * (mem_h[(w - 5u) & 15u] + mem_h[(w - 11u) & 15u])
+           + 0.044110f * (mem_h[(w - 3u) & 15u] + mem_h[(w - 13u) & 15u])
+           - 0.026488f * (mem_h[(w - 1u) & 15u] + mem_h[(w - 15u) & 15u]);
+}
 #define MEM_BLK 256u                    /* MEMORY's loudness, a block of 256 samples each: where its grains may start */
 static uint8_t mem_loud[MEM_N / MEM_BLK + 1u];
 
@@ -276,6 +309,9 @@ void g_init(void)
 {
     gparams_t d;
     zero(&E, sizeof E);
+    zero(mem_h, sizeof mem_h);
+    mem_hw = 0;
+    mem_tab_init();
     zero(rv_line, sizeof rv_line);
     zero(dl_buf, sizeof dl_buf);
     zero(&d, sizeof d);
@@ -607,7 +643,7 @@ static void run_commands(void)
                     uint32_t a = 0;
                     for (k = 0; k < MEM_BLK; k++) {
                         int32_t x = mem_buf[(base + b * MEM_BLK + k) % MEM_N];
-                        a += (uint32_t)(x < 0 ? -x : x);
+                        a += mem_sq[x < 0 ? -x : x];
                     }
                     a /= MEM_BLK;
                     mem_loud[b] = (uint8_t)(a > 255u ? 255u : a);
@@ -1041,10 +1077,9 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                 R += o * g->gr;
             }
             if (mem_rec) {              /* MEMORY listens: the piano and its grains, at half the rate */
-                E.mem_acc += L + R;
+                mem_h[mem_hw++ & 15u] = L + R;
                 if (E.mem_odd ^= 1u) {} else {
-                    float x = fm_clampf(E.mem_acc * 0.5f, -1.0f, 1.0f), a = fm_sqrtf(fm_fabsf(x)) * 127.0f;
-                    mem_buf[E.mem_w] = (int8_t)(x < 0.0f ? -a : a);
+                    mem_buf[E.mem_w] = mem_enc(mem_half_band());
                     if (++E.mem_w >= MEM_N) E.mem_w = 0u;
                     if (E.mem_fill < MEM_N) E.mem_fill++;
                     E.mem_acc = 0.0f;
@@ -1061,8 +1096,8 @@ void g_render(int32_t *lr, uint32_t n, float gain)
                     if (E.mg[j].pos >= (float)MEM_N) E.mg[j].pos -= (float)MEM_N;
                     i0 = (int32_t)E.mg[j].pos;
                     fr = E.mg[j].pos - (float)i0;
-                    a = (float)mem_buf[i0] * (1.0f / 127.0f); a = a * fm_fabsf(a);
-                    b = (float)mem_buf[i0 + 1u >= MEM_N ? 0 : i0 + 1] * (1.0f / 127.0f); b = b * fm_fabsf(b);
+                    a = mem_dec(mem_buf[i0]);
+                    b = mem_dec(mem_buf[i0 + 1u >= MEM_N ? 0 : i0 + 1]);
                     o = (a + (b - a) * fr) * window(E.mg[j].ph);
                     L += o * E.mg[j].gl;
                     R += o * E.mg[j].gr;
