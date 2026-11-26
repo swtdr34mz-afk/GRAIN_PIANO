@@ -68,3 +68,4 @@ void g_shed(void);                      /* the render ran late: fewer grains for
 int g_grains(uint8_t *pos, uint8_t *lvl, uint8_t *voice, int max);
 int g_voice_pos(int v, uint8_t *note, uint8_t *pos);   /* 1 = voice v sounds: its note, its scan position 0..255 */
 float g_level(void);                    /* the output level, 0..1, smoothed */
+int g_env(int note, int at);            /* the sample a note plays: its loudness at at (0..255 along it), 0..255 */

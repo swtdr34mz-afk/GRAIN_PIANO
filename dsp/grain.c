@@ -36,6 +36,7 @@ static void copy(void *d, const void *s, uint32_t n)
 /* ------------------------------------------------------------------ big buffers (the pool on the device) --- */
 static uint32_t ck[CK_MAX] PLAT_POOL;   /* the decoder's state: predictor (low 16 bits), step index (bits 16..23) */
 static uint16_t ck_gain[CK_MAX] PLAT_POOL;   /* a grain's lift there, Q8 (256 = as it is) */
+static uint8_t smp_env[CK_MAX];         /* each block's loudness, 0..255 of the note's loudest (the screen's outline) */
 static float rv_line[4][RV_MAXL] PLAT_POOL;
 static int16_t dl_buf[2][DL_N] PLAT_POOL;
 #define RB_N 4096u                      /* a backwards grain's buffer: 186 ms of the sample */
@@ -147,6 +148,8 @@ int g_samples(const uint8_t *p, uint32_t len)
             rr[k] = fm_sqrtf(a / (float)c);
             if (rr[k] > top) top = rr[k];
         }
+        for (k = 0; k < nb; k++)        /* the outline the screen draws */
+            smp_env[ck_off[i] + k] = (uint8_t)(top > 0.0f ? fm_minf(255.0f, rr[k] / top * 255.0f) : 0.0f);
         for (k = 0; k < nb; k++) {      /* a grain from a quiet part is lifted most of the way, never more than 18 dB */
             float g = rr[k] > 1e-6f ? top / rr[k] : 12.0f;
             g = fm_powf(fm_clampf(g, 1.0f, 12.0f), 0.8f);
@@ -1188,3 +1191,13 @@ int g_voice_pos(int v, uint8_t *note, uint8_t *pos)
 }
 
 float g_level(void) { return E.level; }
+
+int g_env(int note, int at)             /* the sample note plays: its loudness at at (0..255 of its length), 0..255 */
+{
+    int e;
+    uint32_t nb;
+    if (!smp_n) return 0;
+    e = smp_nearest((float)note);
+    nb = (smp_e[e].len + (1u << CK_SH) - 1u) >> CK_SH;
+    return smp_env[ck_off[e] + (uint32_t)at * (nb - 1u) / 255u];
+}

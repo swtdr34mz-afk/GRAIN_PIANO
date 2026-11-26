@@ -895,20 +895,82 @@ static uint16_t mix565(uint16_t a, uint16_t b, uint32_t t)   /* a .. b, t 0..255
     return (uint16_t)(r << 11 | g << 5 | bl);
 }
 
+static uint16_t dim565(uint16_t c, uint32_t a);
+
+/* ---- the facelift's pieces: a soft gradient behind, the battery, gauges in rings */
+static uint16_t lerp565(uint16_t a, uint16_t b, int32_t t, int32_t n)   /* a .. b, t of n */
+{
+    if (n <= 0) return b;
+    return mix565(a, b, (uint32_t)(clamp(t, 0, n) * 255 / n));
+}
+static void bg_rows(int32_t h, uint16_t top, uint16_t bot)   /* the canvas: top .. bot, row by row */
+{
+    int32_t y;
+    for (y = 0; y < h; y++) cv_rect(0, y, 240, 1, lerp565(top, bot, y, h - 1));
+}
+static void frame_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)   /* an outline, its corners off */
+{
+    cv_rect(x + 1, y, w - 2, 1, c); cv_rect(x + 1, y + h - 1, w - 2, 1, c);
+    cv_rect(x, y + 1, 1, h - 2, c); cv_rect(x + w - 1, y + 1, 1, h - 2, c);
+}
+
+/* the battery, at x, y (its icon 22 x 10, the percent left of it): from plat_battery_raw's reading, between the
+ * stock thresholds' ends (about 520 empty .. 605 full); with USB, a bolt */
+static int battery_pct(void)
+{
+    int b = plat_battery();
+    int32_t raw = plat_battery_raw();
+#ifdef PLAT_HOST
+    if (getenv("GP_BATT")) return atoi(getenv("GP_BATT"));   /* (the simulator's previews: a level, 101 USB) */
+#endif
+    if (b == 4) return 101;              /* (USB) */
+    if (raw > 0) return clamp((raw - 520) * 100 / (605 - 520), 0, 100);
+    return b >= 0 ? b * 33 + 1 : -1;
+}
+static void draw_battery(int32_t x, int32_t y)
+{
+    int pct = battery_pct();
+    char t[8];
+    uint16_t c = pct < 0 ? COL_LINE : pct <= 15 ? RGB(232, 76, 60) : pct > 100 ? COL_IVORY : COL_GOLD;
+    frame_rect(x, y, 20, 10, pct < 0 ? COL_LINE : COL_LABEL);
+    cv_rect(x + 20, y + 3, 2, 4, pct < 0 ? COL_LINE : COL_LABEL);
+    if (pct > 100) {                     /* USB: a bolt */
+        static const int8_t B[10][2] = {{11, 1}, {10, 2}, {9, 3}, {8, 4}, {7, 5}, {8, 5}, {9, 5}, {10, 5}, {11, 6}, {10, 7}};
+        int i;
+        cv_rect(x + 2, y + 2, 16, 6, mix565(C_BLACK, COL_GOLD, 70));
+        for (i = 0; i < 10; i++) cv_rect(x + B[i][0] - 1, y + B[i][1], 2, 1, COL_IVORY);
+        cv_rect(x + 8, y + 8, 2, 1, COL_IVORY);
+        cv_text(x - 4 - text_w(&FONT_T, "USB"), y - 1, &FONT_T, "USB", COL_LABEL);
+        return;
+    }
+    if (pct >= 0) {
+        int32_t w = (16 * pct + 50) / 100;
+        cv_rect(x + 2, y + 2, w, 6, c);
+        if (w > 1) cv_rect(x + 2, y + 2, w, 1, mix565(c, COL_IVORY, 120));   /* (a highlight on top) */
+        int_text(pct, t); text_cat(t, "%");
+        cv_text(x - 4 - text_w(&FONT_T, t), y - 1, &FONT_T, t, pct <= 15 ? c : COL_LABEL);
+    }
+}
+
 static void draw_header(uint32_t now)
 {
     cv_begin(240, 32, C_BLACK);
+    bg_rows(31, RGB(34, 24, 44), C_BLACK);
     if (now < ui.msg_until) {
-        int32_t x = cv_text(8, 7, &FONT_B, ui.msg[0], COL_IVORY);
+        int32_t x = cv_text(10, 7, &FONT_B, ui.msg[0], COL_IVORY);
         cv_text(x + 8, 7, &FONT_B, ui.msg[1], COL_GOLD);
     } else {
-        const char *pn = PRESET_NAME[set.preset];
-        cv_text(8, 7, &FONT_B, pn, COL_IVORY);
-        int32_t px = 232 - text_w(&FONT_XS, PAGE_NAME[ui.page]);
-        cv_text(px, 9, &FONT_XS, PAGE_NAME[ui.page], COL_LABEL);
-        if (g_memory_on()) cv_text(px - 8 - text_w(&FONT_XS, "MEM"), 9, &FONT_XS, "MEM", COL_GOLD);
+        int32_t px, pw;
+        cv_rect(10, 12, 3, 3, COL_GOLD); cv_rect(11, 11, 1, 5, COL_GOLD); cv_rect(9, 13, 5, 1, COL_GOLD);   /* a diamond */
+        cv_text(19, 7, &FONT_B, PRESET_NAME[set.preset], COL_IVORY);
+        pw = text_w(&FONT_T, PAGE_NAME[ui.page]) + 10;   /* the page, in a chip */
+        px = 176 - pw;
+        frame_rect(px, 8, pw, 15, mix565(C_BLACK, COL_GOLD, 110));
+        cv_text(px + 5, 10, &FONT_T, PAGE_NAME[ui.page], COL_GOLD);
+        if (g_memory_on()) cv_text(px - 6 - text_w(&FONT_T, "MEM"), 10, &FONT_T, "MEM", COL_EMBER);
     }
-    cv_rect(0, 30, 240, 1, COL_LINE);
+    draw_battery(214, 11);
+    cv_rect(0, 31, 240, 1, mix565(C_BLACK, COL_GOLD, 60));
     cv_blit(0, 0);
 }
 
@@ -916,45 +978,47 @@ static void draw_header(uint32_t now)
  * brighter as it sounds louder, its height the voice's note */
 static void draw_cloud(int32_t y0, int32_t h)
 {
-    uint8_t gp[G_NG], gl[G_NG], gv[G_NG], note, pos;
+    uint8_t gp[G_NG], gl[G_NG], gv[G_NG], note, pos, shown = 60;
     int n = g_grains(gp, gl, gv, G_NG), i;
-    int32_t x0 = 10, w = 220;
+    int32_t x0 = 10, w = 220, base = y0 + h - 10, x;
     uint32_t t = plat_ms();
-    for (i = 0; i < 12; i++) {           /* a faint floor: the sample's length, marked every twelfth */
-        int32_t x = x0 + (w * i) / 11;
-        cv_rect(x, y0 + h - 4, 1, 3, COL_LINE);
+    for (i = 0; i < G_NV; i++)           /* the outline of the note sounding (else C4's) */
+        if (g_voice_pos(i, &note, &pos)) { shown = note; break; }
+    for (x = 0; x < w; x += 2) {         /* the sample, hammer to tail, as a silhouette mirrored on its floor */
+        int e = g_env(shown, (int)(x * 255 / w)), up = e * (h - 30) / 255, dn = up / 4;
+        uint16_t c = mix565(RGB(20, 14, 26), COL_GOLD, (uint32_t)(40 + e / 6));
+        cv_rect(x0 + x, base - up, 1, up, c);
+        cv_rect(x0 + x, base + 1, 1, dn, mix565(RGB(20, 14, 26), COL_GOLD, (uint32_t)(15 + e / 12)));
     }
-    cv_rect(x0, y0 + h - 2, w, 1, COL_LINE);
-    {                                    /* where POSITION points (as set), gold */
-        int32_t x = x0 + (w - 1) * (int32_t)kv()[K_POS] / 100;
-        cv_rect(x - 2, y0 + h - 7, 5, 5, COL_GOLD);
+    cv_rect(x0, base, w, 1, mix565(C_BLACK, COL_GOLD, 90));
+    {                                    /* where POSITION points: a gold tick on the floor */
+        int32_t px = x0 + (w - 1) * (int32_t)kv()[K_POS] / 100;
+        cv_rect(px - 2, base + 2, 5, 2, COL_GOLD); cv_rect(px - 1, base + 4, 3, 1, COL_GOLD); cv_rect(px, base + 5, 1, 1, COL_GOLD);
     }
     for (i = 0; i < G_NV; i++)
-        if (g_voice_pos(i, &note, &pos)) {
-            int32_t x = x0 + (w - 1) * pos / 255, yy;
-            int32_t ny = y0 + 6 + (int32_t)(h - 18) * (84 - clamp(note, 36, 84)) / 48;
-            for (yy = y0 + 4; yy < y0 + h - 8; yy += 3) cv_rect(x, yy, 1, 1, COL_DUSK);
-            cv_rect(x - 3, ny, 7, 1, COL_EMBER);
+        if (g_voice_pos(i, &note, &pos)) {   /* each note's reading point: a fading line */
+            int32_t px = x0 + (w - 1) * pos / 255, yy;
+            for (yy = y0 + 4; yy < base; yy++) cv_rect(px, yy, 1, 1, lerp565(RGB(20, 14, 26), COL_DUSK, yy - y0, base - y0));
         }
-    if (ui.page == PG_MAIN) {             /* the two macros: SELECT and ALGORITHM, their names and how far */
+    if (ui.page == PG_MAIN) {            /* the two macros: SELECT and ALGORITHM, their names and how far */
         int m;
         for (m = 0; m < 2; m++) {
-            int32_t y = y0 + 2 + m * 14, bw = 60 * kv()[K_M1 + m] / 100;
+            int32_t y = y0 + 2 + m * 13, bw = 56 * kv()[K_M1 + m] / 100;
             cv_text(10, y, &FONT_T, m ? "ALGO" : "SELECT", COL_LABEL);
             cv_text(48, y, &FONT_T, MACRO[set.preset % NPRESET][m].name, kv()[K_M1 + m] ? COL_GOLD : COL_LABEL);
-            cv_rect(118, y + 5, 60, 2, COL_LINE);
-            cv_rect(118, y + 5, bw, 2, COL_EMBER);
+            cv_rect(118, y + 5, 56, 2, COL_LINE);
+            cv_rect(118, y + 5, bw, 2, lerp565(COL_EMBER, COL_GOLD, bw, 56));
         }
     }
-    for (i = 0; i < n; i++) {
-        int32_t x = x0 + (w - 1) * gp[i] / 255;
+    for (i = 0; i < n; i++) {            /* the grains: a soft halo, a bright core */
         uint8_t nn = 60, pp;
-        int32_t y, s;
+        int32_t gx = x0 + (w - 1) * gp[i] / 255, gy;
         if (g_voice_pos(gv[i], &nn, &pp)) { (void)pp; }
-        y = y0 + 6 + (int32_t)(h - 18) * (84 - clamp(nn, 36, 84)) / 48;
-        y += (int32_t)((gp[i] * 7u + i * 13u + (t >> 6)) % 15u) - 7;   /* a little drift: a cloud, not a grid */
-        s = 1 + gl[i] / 90;
-        cv_rect(x - s / 2, y - s / 2, s + 1, s + 1, mix565(COL_DUSK, COL_IVORY, gl[i]));
+        gy = y0 + 8 + (int32_t)(h - 34) * (84 - clamp(nn, 36, 84)) / 48;
+        gy += (int32_t)((gp[i] * 7u + (uint32_t)i * 13u + (t >> 6)) % 15u) - 7;
+        cv_rect(gx - 2, gy - 2, 5, 5, mix565(RGB(20, 14, 26), COL_GOLD, gl[i] / 5u));
+        cv_rect(gx - 1, gy - 1, 3, 3, mix565(COL_DUSK, COL_GOLD, gl[i]));
+        cv_rect(gx, gy, 1, 1, mix565(COL_GOLD, COL_IVORY, gl[i]));
     }
     if (!piano_ok) {
         cv_text(10, y0 + 10, &FONT_XS, "THE PIANO'S SAMPLES ARE MISSING:", COL_EMBER);
@@ -994,33 +1058,89 @@ static void draw_loop(int32_t y0, int32_t h, uint32_t now)
     }
 }
 
+/* a gauge: a ring of 270 degrees (from bottom left, clockwise), its pixels worked out once with their coverage
+ * (smooth edges) and their place along the arc */
+#define RING_R 16.5f
+static struct { int8_t dx, dy; uint8_t a, f; } ring[600];
+static int ring_n;
+static float atan2_turns(float y, float x)   /* the angle of (x, y), 0..1 of a turn from +x towards +y */
+{
+    float ax = fm_fabsf(x), ay = fm_fabsf(y), a, r, s;
+    if (ax < 1e-6f && ay < 1e-6f) return 0.0f;
+    r = ax > ay ? ay / ax : ax / ay;
+    s = r * r;
+    a = ((-0.0464964749f * s + 0.15931422f) * s - 0.327622764f) * s * r + r;   /* atan(r), 0..pi/4 */
+    if (ay > ax) a = 1.57079637f - a;
+    if (x < 0.0f) a = 3.14159274f - a;
+    if (y < 0.0f) a = -a;
+    a *= 0.159154943f;
+    return a < 0.0f ? a + 1.0f : a;
+}
+static void ring_init(void)
+{
+    int dx, dy;
+    ring_n = 0;
+    for (dy = -20; dy <= 20; dy++)
+        for (dx = -20; dx <= 20; dx++) {
+            float d = fm_sqrtf((float)(dx * dx + dy * dy)), cov = 1.0f - fm_fabsf(d - RING_R) / 1.9f, rel;
+            if (cov <= 0.0f || ring_n >= 600) continue;
+            rel = atan2_turns((float)dy, (float)dx) - 0.375f;   /* from 135 degrees (bottom left), clockwise */
+            if (rel < 0.0f) rel += 1.0f;
+            if (rel > 0.75f) continue;   /* (the gap at the bottom) */
+            ring[ring_n].dx = (int8_t)dx; ring[ring_n].dy = (int8_t)dy;
+            ring[ring_n].a = (uint8_t)(fm_minf(1.0f, cov * 1.4f) * 255.0f);
+            ring[ring_n].f = (uint8_t)(rel / 0.75f * 255.0f);
+            ring_n++;
+        }
+}
+static void draw_ring(int32_t cx, int32_t cy, int32_t v, int lit)   /* v 0..255 */
+{
+    int i;
+    for (i = 0; i < ring_n; i++) {
+        uint16_t c = ring[i].f <= v ? (lit ? COL_IVORY : lerp565(COL_EMBER, COL_GOLD, ring[i].f, 255)) : RGB(48, 40, 58);
+        cv_pset(cx + ring[i].dx, cy + ring[i].dy, dim565(c, ring[i].a + 1u));
+    }
+    if (v > 0) {                         /* the pointer: a bright dot at the value's end */
+        float a = (0.375f + 0.75f * (float)v / 255.0f) * 6.2831853f;
+        int32_t px = cx + (int32_t)(fm_cosf(a) * RING_R + (fm_cosf(a) < 0.0f ? -0.5f : 0.5f));
+        int32_t py = cy + (int32_t)(fm_sinf(a) * RING_R + (fm_sinf(a) < 0.0f ? -0.5f : 0.5f));
+        cv_rect(px - 1, py - 1, 3, 3, COL_IVORY);
+    }
+}
 static void draw_knobs(int32_t y0, uint32_t now)
 {
     uint32_t i;
+    if (!ring_n) ring_init();
     for (i = 0; i < 4u; i++) {
         int which = PAGE_K[ui.page][i];
-        int32_t x = 4 + (int32_t)i * 59, wbar = 53, fill;
+        int32_t cx = 30 + (int32_t)i * 60, cy = y0 + 31, v;
         int lit = ui.turned_at[i] && now - ui.turned_at[i] < 500u;
         uint32_t nn;
+        const char *name = knob_name(which), *big = 0, *below = 0;
         char t[24];
-        cv_text(x, y0, &FONT_XS, knob_name(which), lit ? COL_IVORY : COL_LABEL);
         value_text(which, t);
-        if (which > K_PRESET) {          /* the scale page */
+        if (which > K_PRESET) {          /* a page for every preset: names */
             uint32_t n2, v2 = *gk(which, &n2);
-            cv_text(x, y0 + 16, &FONT_B, gk_text(which, 1), lit ? COL_IVORY : COL_GOLD);
-            fill = wbar * ((int32_t)v2 + 1) / (int32_t)n2;
-        } else if (which == K_PRESET) {  /* the short name: a cell is 59 pixels wide */
-            cv_text(x, y0 + 16, &FONT_B, PRESET_SHORT[set.preset], lit ? COL_IVORY : COL_GOLD);
-            fill = wbar * ((int32_t)set.preset + 1) / NPRESET;
+            v = n2 > 1u ? (int32_t)(v2 * 255u / (n2 - 1u)) : 255;
+            if (which == K_TEMPO) big = gk_text(which, 1); else below = gk_text(which, 1);
+        } else if (which == K_PRESET) {
+            v = (int32_t)set.preset * 255 / (NPRESET - 1);
+            below = PRESET_SHORT[set.preset];
         } else if (knob_names(which, &nn)) {
-            cv_text(x, y0 + 16, &FONT_B, t, lit ? COL_IVORY : COL_GOLD);
-            fill = wbar * ((int32_t)kv()[which] + 1) / (int32_t)nn;
+            v = nn > 1u ? (int32_t)kv()[which] * 255 / (int32_t)(nn - 1u) : 255;
+            below = t;
         } else {
-            cv_text(x, y0 + 14, &FONT_M, t, lit ? COL_IVORY : COL_GOLD);
-            fill = wbar * (int32_t)kv()[which] / 100;
+            v = (int32_t)kv()[which] * 255 / 100;
+            big = t;
         }
-        cv_rect(x, y0 + 42, wbar, 3, COL_LINE);
-        cv_rect(x, y0 + 42, fill, 3, lit ? COL_IVORY : COL_EMBER);
+        cv_text(cx - text_w(&FONT_T, name) / 2, y0, &FONT_T, name, lit ? COL_IVORY : COL_LABEL);
+        draw_ring(cx, cy, v, lit);
+        if (big) cv_text(cx - text_w(&FONT_B, big) / 2, cy - 8, &FONT_B, big, lit ? COL_IVORY : COL_GOLD);
+        if (below) {                     /* a name: under the ring (the ring itself shows where in the list) */
+            int32_t tw = text_w(&FONT_T, below);
+            cv_text(cx - tw / 2, cy + 18, &FONT_T, below, lit ? COL_IVORY : COL_GOLD);
+            cv_rect(cx - 2, cy - 2, 5, 5, lit ? COL_IVORY : mix565(C_BLACK, COL_GOLD, 160));
+        }
     }
 }
 
@@ -1028,41 +1148,49 @@ static void draw_keys(void)
 {
     static const uint8_t WK[16] = PLAT_WHITE_KEYS, BK[11] = PLAT_BLACK_KEYS;
     static const uint8_t AT[11] = {0, 1, 2, 4, 5, 7, 8, 9, 11, 12, 14};
-    uint32_t held = 0, i;
+    uint32_t i;
     char t[12];
-    int j;
     float w;
-    for (j = 0; j < hd.n; j++) {
-        int32_t kk = held_key(j);
-        if (kk >= 0) held |= 1u << kk;
-    }
     cv_begin(240, 56, C_BLACK);
-    for (i = 0; i < 16u; i++) {
+    bg_rows(56, C_BLACK, RGB(22, 16, 28));
+    for (i = 0; i < 16u; i++) {          /* the white keys: ivory in the dark, a sheen at the top, lit when down */
         uint32_t k = WK[i];
-        uint16_t c = (ui.keys >> k & 1u) ? COL_IVORY : (held >> k & 1u) ? COL_GOLD : key_left(k) ? COL_DUSK : COL_LINE;
-        cv_rect(4 + (int32_t)i * 14, 14, 13, 16, c);
+        int32_t x = 5 + (int32_t)i * 14;
+        int dn = (int)(ui.keys >> k & 1u);
+        uint16_t body = dn ? COL_IVORY : key_left(k) ? RGB(70, 56, 96) : RGB(64, 58, 70);
+        cv_rect(x, 4, 12, 26, body);
+        cv_rect(x, 4, 12, 2, mix565(body, COL_IVORY, dn ? 0 : 60));
+        cv_rect(x, 28, 12, 2, mix565(body, C_BLACK, 110));
+        if (dn) cv_rect(x, 30, 12, 2, mix565(C_BLACK, COL_GOLD, 160));   /* (a glow under a key down) */
     }
-    for (i = 0; i < 11u; i++) {
+    for (i = 0; i < 11u; i++) {          /* the black keys, over them */
         uint32_t k = BK[i];
-        uint16_t c = (ui.keys >> k & 1u) ? COL_IVORY : (held >> k & 1u) ? COL_EMBER : COL_NIGHT;
-        cv_rect(4 + (int32_t)AT[i] * 14 + 8, 4, 11, 12, c);
+        int32_t x = 5 + (int32_t)AT[i] * 14 + 9;
+        int dn = (int)(ui.keys >> k & 1u);
+        uint16_t body = dn ? COL_GOLD : key_left(k) ? RGB(36, 26, 52) : RGB(18, 15, 22);
+        cv_rect(x - 1, 3, 10, 16, C_BLACK);
+        cv_rect(x, 3, 8, 15, body);
+        cv_rect(x + 1, 4, 6, 1, mix565(body, COL_IVORY, 40));
     }
-    {                                    /* the loop: stopped, playing (its bar), counting in, recording */
+    {                                    /* the loop, in a chip: stopped, playing (its bar), counting in, recording */
         int pl, rc, bar, bars = g_seq_state(&pl, &rc, &w, &bar);
         const char *st = rc == 2 ? "REC" : rc == 1 ? "COUNT" : pl ? "PLAY" : "STOP";
-        cv_text(4, 36, &FONT_XS, st, rc ? COL_EMBER : pl ? COL_GOLD : COL_LINE);
+        uint16_t c = rc ? COL_EMBER : pl ? COL_GOLD : COL_LABEL;
+        t[0] = 0; text_cat(t, st);
         if (pl && rc != 1) {
             char u[6];
-            t[0] = 0; int_text(bar + 1, t); text_cat(t, "/"); int_text(bars, u); text_cat(t, u);
-            cv_text(44, 36, &FONT_XS, t, COL_IVORY);
+            text_cat(t, " "); int_text(bar + 1, u); text_cat(t, u); text_cat(t, "/"); int_text(bars, u); text_cat(t, u);
         }
+        frame_rect(5, 37, text_w(&FONT_T, t) + 16, 14, mix565(C_BLACK, c, 120));
+        cv_rect(9, 42, 4, 4, c);
+        cv_text(16, 38, &FONT_T, t, c);
     }
-    cv_text(150, 36, &FONT_XS, "OCT", COL_LABEL);
-    t[0] = set.octave < 0 ? '-' : '+'; t[1] = (char)('0' + (set.octave < 0 ? -set.octave : set.octave)); t[2] = 0;
-    cv_text(176, 36, &FONT_XS, t, COL_IVORY);
-    if (set_dirty) cv_text(204, 36, &FONT_XS, "SAVE", COL_EMBER);
     t[0] = 0; text_cat(t, "CPU "); int_text((int32_t)plat_cpu_pct(), t + 4); text_cat(t, "%");
-    cv_text(96, 36, &FONT_XS, t, plat_cpu_pct() > 85u ? COL_EMBER : COL_LABEL);   /* the audio's load (for the tests) */
+    cv_text(100, 38, &FONT_T, t, plat_cpu_pct() > 85u ? COL_EMBER : COL_LABEL);
+    t[0] = 'O'; t[1] = 'C'; t[2] = 'T'; t[3] = ' ';
+    t[4] = set.octave < 0 ? '-' : '+'; t[5] = (char)('0' + (set.octave < 0 ? -set.octave : set.octave)); t[6] = 0;
+    cv_text(152, 38, &FONT_T, t, COL_LABEL);
+    if (set_dirty) cv_text(196, 38, &FONT_T, "SAVE", COL_EMBER);
     cv_blit(0, 184);
 }
 
@@ -1070,9 +1198,10 @@ static void draw(uint32_t now)
 {
     draw_header(now);
     cv_begin(240, 144, C_BLACK);
+    bg_rows(144, RGB(12, 9, 16), RGB(24, 17, 30));
     if (ui.page == PG_LOOP) draw_loop(0, 80, now);
-    else draw_cloud(0, ui.page == PG_MAIN ? 92 : 80);
-    draw_knobs(ui.page == PG_MAIN ? 96 : 92, now);
+    else draw_cloud(0, 84);
+    draw_knobs(ui.page == PG_MAIN ? 88 : 84, now);
     cv_blit(0, 36);
     draw_keys();
 }
@@ -1151,6 +1280,9 @@ static void title_draw(uint32_t t)
             }
     }
     cv_blit(0, INTRO_Y);
+    cv_begin(240, 28, C_BLACK);          /* the battery, here too */
+    draw_battery(214, 11);
+    cv_blit(0, 0);
     /* by swtdr34mz, fading in, and out at the end */
     by = t < 800u ? t * 256u / 800u : t < INTRO_SHIM + INTRO_DIS ? 256u :
          t < INTRO_SHIM + INTRO_DIS + INTRO_END ? 256u - (t - INTRO_SHIM - INTRO_DIS) * 256u / INTRO_END : 0u;

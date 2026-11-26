@@ -11,6 +11,7 @@
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
 #define APP_SPLASH                       /* app_splash: the title on black at power-on */
 #define APP_OVERLOAD                     /* app_overload: the render over 90 % of its time */
+#define APP_BATTERY_RAW                  /* plat_battery_raw: the battery's reading, for its percent */
 #define APP_TOUCH                        /* velocity from the keys (lib/touch.h) */
 
 /* the store: the app's settings and the panel calibration (the platform's), and their flash offsets (as CHORD RUN's) */
