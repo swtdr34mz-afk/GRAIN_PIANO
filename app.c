@@ -1140,11 +1140,11 @@ static void draw_loop(int32_t y0, int32_t h, uint32_t now)
     }
 }
 
-/* a gauge: a ring of 270 degrees (from bottom left, clockwise), its pixels worked out once with their coverage
+/* a gauge: a gauge_px of 270 degrees (from bottom left, clockwise), its pixels worked out once with their coverage
  * (smooth edges) and their place along the arc */
 #define RING_R 16.5f
-static struct { int8_t dx, dy; uint8_t a, f; } ring[600];
-static int ring_n;
+static struct { int8_t dx, dy; uint8_t a, f; } gauge_px[600];
+static int gauge_n;
 static float atan2_turns(float y, float x)   /* the angle of (x, y), 0..1 of a turn from +x towards +y */
 {
     float ax = fm_fabsf(x), ay = fm_fabsf(y), a, r, s;
@@ -1161,26 +1161,26 @@ static float atan2_turns(float y, float x)   /* the angle of (x, y), 0..1 of a t
 static void ring_init(void)
 {
     int dx, dy;
-    ring_n = 0;
+    gauge_n = 0;
     for (dy = -20; dy <= 20; dy++)
         for (dx = -20; dx <= 20; dx++) {
             float d = fm_sqrtf((float)(dx * dx + dy * dy)), cov = 1.0f - fm_fabsf(d - RING_R) / 1.9f, rel;
-            if (cov <= 0.0f || ring_n >= 600) continue;
+            if (cov <= 0.0f || gauge_n >= 600) continue;
             rel = atan2_turns((float)dy, (float)dx) - 0.375f;   /* from 135 degrees (bottom left), clockwise */
             if (rel < 0.0f) rel += 1.0f;
             if (rel > 0.75f) continue;   /* (the gap at the bottom) */
-            ring[ring_n].dx = (int8_t)dx; ring[ring_n].dy = (int8_t)dy;
-            ring[ring_n].a = (uint8_t)(fm_minf(1.0f, cov * 1.4f) * 255.0f);
-            ring[ring_n].f = (uint8_t)(rel / 0.75f * 255.0f);
-            ring_n++;
+            gauge_px[gauge_n].dx = (int8_t)dx; gauge_px[gauge_n].dy = (int8_t)dy;
+            gauge_px[gauge_n].a = (uint8_t)(fm_minf(1.0f, cov * 1.4f) * 255.0f);
+            gauge_px[gauge_n].f = (uint8_t)(rel / 0.75f * 255.0f);
+            gauge_n++;
         }
 }
 static void draw_ring(int32_t cx, int32_t cy, int32_t v, int lit)   /* v 0..255 */
 {
     int i;
-    for (i = 0; i < ring_n; i++) {
-        uint16_t c = ring[i].f <= v ? (lit ? COL_IVORY : lerp565(COL_EMBER, COL_GOLD, ring[i].f, 255)) : RGB(48, 40, 58);
-        cv_pset(cx + ring[i].dx, cy + ring[i].dy, dim565(c, ring[i].a + 1u));
+    for (i = 0; i < gauge_n; i++) {
+        uint16_t c = gauge_px[i].f <= v ? (lit ? COL_IVORY : lerp565(COL_EMBER, COL_GOLD, gauge_px[i].f, 255)) : RGB(48, 40, 58);
+        cv_pset(cx + gauge_px[i].dx, cy + gauge_px[i].dy, dim565(c, gauge_px[i].a + 1u));
     }
     if (v > 0) {                         /* the pointer: a bright dot at the value's end */
         float a = (0.375f + 0.75f * (float)v / 255.0f) * 6.2831853f;
@@ -1192,7 +1192,7 @@ static void draw_ring(int32_t cx, int32_t cy, int32_t v, int lit)   /* v 0..255 
 static void draw_knobs(int32_t y0, uint32_t now)
 {
     uint32_t i;
-    if (!ring_n) ring_init();
+    if (!gauge_n) ring_init();
     for (i = 0; i < 4u; i++) {
         int which = PAGE_K[ui.page][i];
         int32_t cx = 30 + (int32_t)i * 60, cy = y0 + 31, v;
@@ -1218,7 +1218,7 @@ static void draw_knobs(int32_t y0, uint32_t now)
         cv_text(cx - text_w(&FONT_T, name) / 2, y0, &FONT_T, name, lit ? COL_IVORY : COL_LABEL);
         draw_ring(cx, cy, v, lit);
         if (big) cv_text(cx - text_w(&FONT_B, big) / 2, cy - 8, &FONT_B, big, lit ? COL_IVORY : COL_GOLD);
-        if (below) {                     /* a name: under the ring (the ring itself shows where in the list) */
+        if (below) {                     /* a name: under the gauge_px (the gauge_px itself shows where in the list) */
             int32_t tw = text_w(&FONT_T, below);
             cv_text(cx - tw / 2, cy + 18, &FONT_T, below, lit ? COL_IVORY : COL_GOLD);
             cv_rect(cx - 2, cy - 2, 5, 5, lit ? COL_IVORY : mix565(C_BLACK, COL_GOLD, 160));
