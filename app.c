@@ -914,7 +914,7 @@ static void frame_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)  
     cv_rect(x, y + 1, 1, h - 2, c); cv_rect(x + w - 1, y + 1, 1, h - 2, c);
 }
 
-/* the battery, at x, y (its icon 22 x 10, the percent left of it): from plat_battery_raw's reading, between the
+/* the battery, at x, y (an icon 22 x 10, filled as it is charged, red when nearly empty): from plat_battery_raw's reading, between the
  * stock thresholds' ends (about 520 empty .. 605 full); with USB, a bolt */
 static int battery_pct(void)
 {
@@ -930,7 +930,6 @@ static int battery_pct(void)
 static void draw_battery(int32_t x, int32_t y)
 {
     int pct = battery_pct();
-    char t[8];
     uint16_t c = pct < 0 ? COL_LINE : pct <= 15 ? RGB(232, 76, 60) : pct > 100 ? COL_IVORY : COL_GOLD;
     frame_rect(x, y, 20, 10, pct < 0 ? COL_LINE : COL_LABEL);
     cv_rect(x + 20, y + 3, 2, 4, pct < 0 ? COL_LINE : COL_LABEL);
@@ -940,15 +939,12 @@ static void draw_battery(int32_t x, int32_t y)
         cv_rect(x + 2, y + 2, 16, 6, mix565(C_BLACK, COL_GOLD, 70));
         for (i = 0; i < 10; i++) cv_rect(x + B[i][0] - 1, y + B[i][1], 2, 1, COL_IVORY);
         cv_rect(x + 8, y + 8, 2, 1, COL_IVORY);
-        cv_text(x - 4 - text_w(&FONT_T, "USB"), y - 1, &FONT_T, "USB", COL_LABEL);
         return;
     }
     if (pct >= 0) {
         int32_t w = (16 * pct + 50) / 100;
         cv_rect(x + 2, y + 2, w, 6, c);
         if (w > 1) cv_rect(x + 2, y + 2, w, 1, mix565(c, COL_IVORY, 120));   /* (a highlight on top) */
-        int_text(pct, t); text_cat(t, "%");
-        cv_text(x - 4 - text_w(&FONT_T, t), y - 1, &FONT_T, t, pct <= 15 ? c : COL_LABEL);
     }
 }
 
@@ -976,6 +972,74 @@ static void draw_header(uint32_t now)
 
 /* the cloud: the sample from its hammer (left) to its tail (right), each voice's position a line, each grain a dot,
  * brighter as it sounds louder, its height the voice's note */
+/* light, added: a pixel brightened by (r, g, b) out of 255 (light on light grows brighter, as it does) */
+static inline void light(int32_t x, int32_t y, uint32_t r, uint32_t g, uint32_t b)
+{
+    uint16_t *px;
+    uint32_t c, cr, cg, cb;
+    y += cv_oy;
+    if ((uint32_t)x >= cv_w || y < cv_y0 || y >= cv_y1) return;
+    px = &cv_px[(uint32_t)y * cv_w + (uint32_t)x];
+    c = swap16(*px);
+    cr = ((c >> 11) << 3) + r; cg = (((c >> 5) & 63u) << 2) + g; cb = ((c & 31u) << 3) + b;
+    if (cr > 255u) cr = 255u;
+    if (cg > 255u) cg = 255u;
+    if (cb > 255u) cb = 255u;
+    *px = swap16(RGB(cr, cg, cb));
+}
+/* a soft point of light at a sub-pixel place (x, y in 1/16 px): its brightness shared among the four pixels around
+ * it (no jumping from pixel to pixel), warm gold, whiter as it is brighter */
+static void glow(int32_t x16, int32_t y16, uint32_t lv)
+{
+    int32_t x = x16 >> 4, y = y16 >> 4;
+    uint32_t fx = (uint32_t)(x16 & 15), fy = (uint32_t)(y16 & 15), w[4], i;
+    uint32_t r = 255u, g = 170u + (lv > 200u ? 70u : lv * 70u / 200u), b = 70u + (lv > 180u ? 140u : lv * 140u / 180u);
+    w[0] = (16u - fx) * (16u - fy); w[1] = fx * (16u - fy); w[2] = (16u - fx) * fy; w[3] = fx * fy;
+    for (i = 0; i < 4u; i++) {
+        uint32_t a = w[i] * lv >> 8;     /* 0..255 */
+        if (a) light(x + (int32_t)(i & 1u), y + (int32_t)(i >> 1), r * a >> 8, g * a >> 8, b * a >> 8);
+    }
+}
+
+/* the dust: each grain sheds fine specks of light that rise, drift and glow out */
+#define NDUST 420
+static struct { int32_t x, y, vx, vy; uint16_t life, max; uint8_t lv; } dust[NDUST];   /* (1/16 px, frames) */
+static uint32_t dust_rng = 0x9E3779B9u;
+static inline uint32_t drnd(void) { dust_rng ^= dust_rng << 13; dust_rng ^= dust_rng >> 17; dust_rng ^= dust_rng << 5; return dust_rng; }
+static void dust_shed(int32_t x16, int32_t y16, uint32_t lv, int n)
+{
+    static uint32_t at;
+    while (n-- > 0) {
+        uint32_t i, r = drnd();
+        for (i = 0; i < NDUST && dust[at].life; i++) at = (at + 1u) % NDUST;
+        if (dust[at].life) return;       /* (full) */
+        dust[at].x = x16 + (int32_t)(r & 63u) - 32;
+        dust[at].y = y16 + (int32_t)((r >> 6) & 63u) - 32;
+        dust[at].vx = (int32_t)((r >> 12) & 31u) - 15;         /* (sideways) */
+        dust[at].vy = -3 - (int32_t)((r >> 17) & 7u);           /* (rising) */
+        dust[at].max = dust[at].life = (uint16_t)(20u + ((r >> 20) & 31u));
+        dust[at].lv = (uint8_t)(90u + (lv * ((r >> 25) & 127u) >> 8));
+    }
+}
+static uint32_t dust_live;               /* specks still glowing (the screen keeps moving till they are out) */
+static void dust_draw(int32_t ytop)
+{
+    uint32_t i;
+    dust_live = 0;
+    for (i = 0; i < NDUST; i++) {
+        uint32_t t, a;
+        if (!dust[i].life) continue;
+        dust_live++;
+        dust[i].x += dust[i].vx; dust[i].y += dust[i].vy;
+        dust[i].vx += (int32_t)(drnd() % 3u) - 1;              /* (a little air) */
+        if (dust[i].y < ytop << 4) dust[i].life = 1;
+        t = dust[i].life * 256u / dust[i].max;                 /* 256 .. 0 */
+        a = (dust[i].lv * (t < 128u ? t * 2u : 256u - (t - 128u) / 2u)) >> 8;   /* (in quickly, out slowly) */
+        glow(dust[i].x, dust[i].y, a);
+        dust[i].life--;
+    }
+}
+
 static void draw_cloud(int32_t y0, int32_t h)
 {
     uint8_t gp[G_NG], gl[G_NG], gv[G_NG], note, pos, shown = 60;
@@ -984,11 +1048,18 @@ static void draw_cloud(int32_t y0, int32_t h)
     uint32_t t = plat_ms();
     for (i = 0; i < G_NV; i++)           /* the outline of the note sounding (else C4's) */
         if (g_voice_pos(i, &note, &pos)) { shown = note; break; }
-    for (x = 0; x < w; x += 2) {         /* the sample, hammer to tail, as a silhouette mirrored on its floor */
-        int e = g_env(shown, (int)(x * 255 / w)), up = e * (h - 30) / 255, dn = up / 4;
-        uint16_t c = mix565(RGB(20, 14, 26), COL_GOLD, (uint32_t)(40 + e / 6));
-        cv_rect(x0 + x, base - up, 1, up, c);
-        cv_rect(x0 + x, base + 1, 1, dn, mix565(RGB(20, 14, 26), COL_GOLD, (uint32_t)(15 + e / 12)));
+    for (x = 0; x < w; x++) {            /* the sample, hammer to tail: a soft silhouette mirrored on its floor */
+        int e = g_env(shown, (int)(x * 255 / w)), y;
+        int32_t up16 = e * (h - 30) * 16 / 255, up = up16 >> 4, fr = up16 & 15;
+        for (y = 0; y < up; y++) {       /* (brighter towards its edge, as light on a crest) */
+            uint32_t a = 18u + (uint32_t)y * 46u / (uint32_t)(up > 0 ? up : 1);
+            light(x0 + x, base - 1 - y, a, a * 2u / 3u, a / 4u);
+        }
+        light(x0 + x, base - 1 - up, (uint32_t)fr * 6u, (uint32_t)fr * 4u, (uint32_t)fr);   /* (its edge, smooth) */
+        for (y = 0; y < up / 4; y++) {   /* the reflection, fading */
+            uint32_t a = 26u - (uint32_t)y * 26u / (uint32_t)(up / 4 > 0 ? up / 4 : 1);
+            light(x0 + x, base + 1 + y, a, a * 2u / 3u, a / 4u);
+        }
     }
     cv_rect(x0, base, w, 1, mix565(C_BLACK, COL_GOLD, 90));
     {                                    /* where POSITION points: a gold tick on the floor */
@@ -998,7 +1069,10 @@ static void draw_cloud(int32_t y0, int32_t h)
     for (i = 0; i < G_NV; i++)
         if (g_voice_pos(i, &note, &pos)) {   /* each note's reading point: a fading line */
             int32_t px = x0 + (w - 1) * pos / 255, yy;
-            for (yy = y0 + 4; yy < base; yy++) cv_rect(px, yy, 1, 1, lerp565(RGB(20, 14, 26), COL_DUSK, yy - y0, base - y0));
+            for (yy = y0 + 4; yy < base; yy++) {   /* (a faint beam, rising from the floor) */
+                uint32_t a = (uint32_t)(yy - y0) * 34u / (uint32_t)(base - y0);
+                light(px, yy, a * 2u / 3u, a / 2u, a);
+            }
         }
     if (ui.page == PG_MAIN) {            /* the two macros: SELECT and ALGORITHM, their names and how far */
         int m;
@@ -1006,20 +1080,28 @@ static void draw_cloud(int32_t y0, int32_t h)
             int32_t y = y0 + 2 + m * 13, bw = 56 * kv()[K_M1 + m] / 100;
             cv_text(10, y, &FONT_T, m ? "ALGO" : "SELECT", COL_LABEL);
             cv_text(48, y, &FONT_T, MACRO[set.preset % NPRESET][m].name, kv()[K_M1 + m] ? COL_GOLD : COL_LABEL);
-            cv_rect(118, y + 5, 56, 2, COL_LINE);
-            cv_rect(118, y + 5, bw, 2, lerp565(COL_EMBER, COL_GOLD, bw, 56));
+            cv_rect(98, y + 5, 40, 1, COL_LINE);
+            cv_rect(98, y + 5, bw * 40 / 56, 1, lerp565(COL_EMBER, COL_GOLD, bw, 56));
         }
     }
-    for (i = 0; i < n; i++) {            /* the grains: a soft halo, a bright core */
+    for (i = 0; i < n; i++) {            /* the grains: soft lights between the pixels, each shedding dust */
         uint8_t nn = 60, pp;
-        int32_t gx = x0 + (w - 1) * gp[i] / 255, gy;
+        int32_t gx16, gy16;
         if (g_voice_pos(gv[i], &nn, &pp)) { (void)pp; }
-        gy = y0 + 8 + (int32_t)(h - 34) * (84 - clamp(nn, 36, 84)) / 48;
-        gy += (int32_t)((gp[i] * 7u + (uint32_t)i * 13u + (t >> 6)) % 15u) - 7;
-        cv_rect(gx - 2, gy - 2, 5, 5, mix565(RGB(20, 14, 26), COL_GOLD, gl[i] / 5u));
-        cv_rect(gx - 1, gy - 1, 3, 3, mix565(COL_DUSK, COL_GOLD, gl[i]));
-        cv_rect(gx, gy, 1, 1, mix565(COL_GOLD, COL_IVORY, gl[i]));
+        gx16 = (x0 << 4) + (int32_t)((uint32_t)(w - 1) * 16u * gp[i] / 255u);
+        gy16 = ((y0 + 8) << 4) + (h - 34) * 16 * (84 - clamp(nn, 36, 84)) / 48;
+        gy16 += (int32_t)(((gp[i] * 7u + (uint32_t)i * 13u) * 16u + (t >> 2)) % 240u) - 120;   /* (drifting) */
+        {
+            uint32_t lv = 120u + gl[i] / 2u, hl = lv / 3u;   /* (bright enough to be seen, its loudness on top) */
+            glow(gx16, gy16, lv);
+            glow(gx16 - 16, gy16, hl); glow(gx16 + 16, gy16, hl);   /* (a soft halo) */
+            glow(gx16, gy16 - 16, hl); glow(gx16, gy16 + 16, hl);
+            glow(gx16 - 24, gy16 - 24, hl / 3u); glow(gx16 + 24, gy16 - 24, hl / 3u);
+            glow(gx16 - 24, gy16 + 24, hl / 3u); glow(gx16 + 24, gy16 + 24, hl / 3u);
+            dust_shed(gx16, gy16, lv, 2 + (int)(gl[i] > 120u));
+        }
     }
+    dust_draw(y0);
     if (!piano_ok) {
         cv_text(10, y0 + 10, &FONT_XS, "THE PIANO'S SAMPLES ARE MISSING:", COL_EMBER);
         cv_text(10, y0 + 26, &FONT_XS, "INSTALL THE FULL PACKAGE AGAIN", COL_LABEL);
@@ -1358,7 +1440,7 @@ void app_frame(void)
         }
     }
     /* the cloud moves while anything sounds: about 30 pictures a second; else only on a change */
-    if (ui.redraw || ((g_level() > 0.0002f || hd.n) && now - ui.t_draw >= 33u)) {
+    if (ui.redraw || ((g_level() > 0.0002f || hd.n || dust_live) && now - ui.t_draw >= 33u)) {
         ui.redraw = 0;
         ui.t_draw = now;
         draw(now);
